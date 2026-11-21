@@ -1,0 +1,17 @@
+{
+  "name": "pokiwar-web",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Pokiwar Web Remake (Full 16:9 Spine 2D + Match-3 + PvE & Real-time PvP)",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @pokiwar/server --filter @pokiwar/client dev",
+    "dev:client": "pnpm --filter @pokiwar/client dev",
+    "dev:server": "pnpm --filter @pokiwar/server dev",
+    "build": "pnpm --filter @pokiwar/shared build && pnpm --filter @pokiwar/server build && pnpm --filter @pokiwar/client build",
+    "test": "pnpm --filter @pokiwar/shared test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
