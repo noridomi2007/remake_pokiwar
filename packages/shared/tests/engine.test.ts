@@ -19,6 +19,7 @@ import {
   getElementMultiplier,
   getPetById,
   getPetSpritePath,
+  MAX_PET_LEVEL,
   passTurn,
   PET_AURAS,
   PVE_STAGES,
@@ -562,5 +563,40 @@ describe('Combat Engine, Progression & Bot AI', () => {
     expect(shieldDelta && shieldDelta.type === 'RESOURCE_DELTA' && shieldDelta.shieldGain).toBeGreaterThan(0);
     expect(state.fighters.P1.shield).toBeGreaterThan(0);
     expect(state.fighters.P2.hp).toBe(enemyHpStart);
+  });
+
+  it('enforces MAX_PET_LEVEL = 15 cap, monotonic tier stat balance across all 70 pets, and hardcore Boss empowerment', () => {
+    expect(MAX_PET_LEVEL).toBe(15);
+    const lion = getPetById('pet-583');
+    const lv15 = applyPetProgression(lion, 15, undefined, 3, 2, 1);
+    const lv99 = applyPetProgression(lion, 99, undefined, 3, 2, 1);
+    expect(lv99.maxHp).toBe(lv15.maxHp);
+    expect(lv99.attack).toBe(lv15.attack);
+    expect(lv99.defense).toBe(lv15.defense);
+    expect(calcMultiStoneUpgradeRate(15, [0, 0, 0, 0, 4], 60, true)).toBe(0);
+
+    // Monotonic tier balance check: average HP & ATK scale cleanly from BASE -> S -> MEGA -> GALAXY -> FANTASY
+    const avgStat = (tier: string, key: 'maxHp' | 'attack') => {
+      const list = STARTER_PETS.filter((p) => p.tier === tier);
+      expect(list.length).toBeGreaterThan(0);
+      return list.reduce((s, p) => s + p[key], 0) / list.length;
+    };
+    expect(avgStat('S', 'maxHp')).toBeGreaterThan(avgStat('BASE', 'maxHp'));
+    expect(avgStat('MEGA', 'maxHp')).toBeGreaterThan(avgStat('S', 'maxHp'));
+    expect(avgStat('GALAXY', 'maxHp')).toBeGreaterThan(avgStat('MEGA', 'maxHp'));
+    expect(avgStat('FANTASY', 'maxHp')).toBeGreaterThan(avgStat('GALAXY', 'maxHp'));
+    expect(avgStat('FANTASY', 'attack')).toBeGreaterThan(avgStat('MEGA', 'attack'));
+
+    // Hardcore Boss empowerment: >= 2.5x HP, higher ATK/DEF, big initial shield, regen buff, and >= 1 revive heart
+    const p1 = applyPetProgression(getPetById('pet-mega-zidarose'), 15, undefined, 5, 3, 2);
+    const boss = getPetById('pet-boss-humex');
+    const normalBattle = createBattleState(p1, boss, 9191, 1.5, 15, 15, 8, 8, { isBossEncounter: false });
+    const bossBattle = createBattleState(p1, boss, 9191, 1.5, 15, 15, 8, 8, { isBossEncounter: true });
+    expect(bossBattle.fighters.P2.maxHp).toBeGreaterThanOrEqual(Math.round(normalBattle.fighters.P2.maxHp * 2.5));
+    expect(bossBattle.fighters.P2.attack).toBeGreaterThan(normalBattle.fighters.P2.attack);
+    expect(bossBattle.fighters.P2.defense).toBeGreaterThan(normalBattle.fighters.P2.defense);
+    expect(bossBattle.fighters.P2.shield).toBeGreaterThanOrEqual(Math.round(bossBattle.fighters.P2.maxHp * 0.35));
+    expect(bossBattle.fighters.P2.reviveCharges ?? 0).toBeGreaterThanOrEqual(1);
+    expect(bossBattle.fighters.P2.statuses.some((s) => s.kind === 'SHIELD_REGEN')).toBe(true);
   });
 });

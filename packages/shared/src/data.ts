@@ -4029,6 +4029,51 @@ function defaultPassiveForTier(pet: PetDef): PetDef['passiveSkill'] {
  * - Pet Thường (BASE / S) KHÔNG có kỹ năng riêng (chiến đấu bằng 6 Ngọc Match-3, Thẻ Chưởng & Thẻ Hỗ Trợ).
  * - Chỉ các Pet Đặc Biệt (Mega, Galaxy, Fantasy, Cổ Đại / Primal, Huyền Thoại, Mech) mới sở hữu Thẻ Kỹ Năng Đặc Biệt!
  */
+export const MAX_PET_LEVEL = 15;
+
+const TIER_STAT_BANDS: Record<
+  EvolutionTier,
+  { hp: [number, number]; atk: [number, number]; mag: [number, number]; def: [number, number]; spd: [number, number] }
+> = {
+  BASE: { hp: [1120, 1360], atk: [110, 140], mag: [105, 138], def: [76, 102], spd: [88, 108] },
+  S: { hp: [1380, 1640], atk: [138, 170], mag: [132, 168], def: [96, 122], spd: [100, 118] },
+  LEGEND: { hp: [1680, 1980], atk: [170, 202], mag: [165, 200], def: [115, 140], spd: [110, 128] },
+  MECH: { hp: [1740, 2020], atk: [176, 208], mag: [170, 204], def: [120, 144], spd: [112, 130] },
+  MEGA: { hp: [1920, 2260], atk: [192, 226], mag: [188, 224], def: [130, 158], spd: [116, 134] },
+  GALAXY: { hp: [2240, 2620], atk: [220, 258], mag: [216, 256], def: [148, 178], spd: [124, 142] },
+  ANCIENT: { hp: [2520, 2920], atk: [244, 282], mag: [240, 280], def: [166, 196], spd: [130, 148] },
+  FANTASY: { hp: [2780, 3120], atk: [266, 298], mag: [262, 296], def: [180, 210], spd: [136, 152] },
+  TITAN: { hp: [2650, 3020], atk: [255, 290], mag: [250, 288], def: [174, 202], spd: [132, 148] },
+};
+
+const RAW_TIER_RANGES: Partial<
+  Record<EvolutionTier, { hp: [number, number]; atk: [number, number]; mag: [number, number]; def: [number, number]; spd: [number, number] }>
+> = {};
+for (const p of RAW_STARTER_PETS) {
+  const cur = RAW_TIER_RANGES[p.tier];
+  if (!cur) {
+    RAW_TIER_RANGES[p.tier] = {
+      hp: [p.maxHp, p.maxHp],
+      atk: [p.attack, p.attack],
+      mag: [p.magic, p.magic],
+      def: [p.defense, p.defense],
+      spd: [p.speed, p.speed],
+    };
+  } else {
+    cur.hp = [Math.min(cur.hp[0], p.maxHp), Math.max(cur.hp[1], p.maxHp)];
+    cur.atk = [Math.min(cur.atk[0], p.attack), Math.max(cur.atk[1], p.attack)];
+    cur.mag = [Math.min(cur.mag[0], p.magic), Math.max(cur.mag[1], p.magic)];
+    cur.def = [Math.min(cur.def[0], p.defense), Math.max(cur.def[1], p.defense)];
+    cur.spd = [Math.min(cur.spd[0], p.speed), Math.max(cur.spd[1], p.speed)];
+  }
+}
+
+function normalizeStatInBand(val: number, rawRange: [number, number], targetBand: [number, number]): number {
+  const span = rawRange[1] - rawRange[0];
+  const ratio = span > 0 ? (val - rawRange[0]) / span : 0.5;
+  return Math.round(targetBand[0] + ratio * (targetBand[1] - targetBand[0]));
+}
+
 const SPECIAL_SKILL_TIERS: ReadonlySet<EvolutionTier> = new Set([
   'MEGA',
   'GALAXY',
@@ -4056,8 +4101,21 @@ export const STARTER_PETS: PetDef[] = RAW_STARTER_PETS.map((pet) => {
       };
     });
   }
+  const band = TIER_STAT_BANDS[pet.tier] ?? TIER_STAT_BANDS.BASE;
+  const rawR = RAW_TIER_RANGES[pet.tier] ?? {
+    hp: [pet.maxHp, pet.maxHp],
+    atk: [pet.attack, pet.attack],
+    mag: [pet.magic, pet.magic],
+    def: [pet.defense, pet.defense],
+    spd: [pet.speed, pet.speed],
+  };
   return {
     ...pet,
+    maxHp: normalizeStatInBand(pet.maxHp, rawR.hp, band.hp),
+    attack: normalizeStatInBand(pet.attack, rawR.atk, band.atk),
+    magic: normalizeStatInBand(pet.magic, rawR.mag, band.mag),
+    defense: normalizeStatInBand(pet.defense, rawR.def, band.def),
+    speed: normalizeStatInBand(pet.speed, rawR.spd, band.spd),
     passiveSkill: defaultPassiveForTier(pet),
     evolutionSprites: {
       BASE: pet.spriteId,
@@ -4160,7 +4218,7 @@ export const DUNGEON_ISLANDS: readonly DungeonIslandDef[] = [
   },
 ];
 
-export const PVE_STAGES: StageDef[] = [
+const RAW_PVE_STAGES: StageDef[] = [
   // ==================== ĐẢO 1: ĐẢO KHỞI NGUYÊN (4 PET PHÓ BẢN + BOSS GUSAI) ====================
   {
     id: 'stage-1-1',
@@ -5113,6 +5171,17 @@ export const PVE_STAGES: StageDef[] = [
   },
 ];
 
+/** Cân bằng độ khó Phó Bản & Boss chuẩn Pokiwar (MAX Lv.15): Quái ×1.22, Boss ×1.35 sức mạnh */
+export const PVE_STAGES: StageDef[] = RAW_PVE_STAGES.map((st) => {
+  const isBossStage = Boolean(st.isBoss || st.mode === 'BOSS');
+  const scaleBump = isBossStage ? 1.35 : 1.22;
+  return {
+    ...st,
+    enemyScale: Number((st.enemyScale * scaleBump).toFixed(2)),
+    recommendedPower: Math.round(st.recommendedPower * (isBossStage ? 1.28 : 1.15)),
+  };
+});
+
 export function getPetById(petId: string): PetDef {
   return STARTER_PETS.find((p) => p.id === petId) ?? STARTER_PETS[0];
 }
@@ -5138,14 +5207,14 @@ export function applyPetProgression(
   genLevel = 0,
   petBreakthrough = 0,
 ): PetDef {
-  const safeLv = Math.max(1, level);
+  const safeLv = Math.max(1, Math.min(MAX_PET_LEVEL, level));
   const safeStars = Math.max(1, Math.min(6, stars || pet.stars || 1));
   const safeGen = Math.max(0, Math.min(5, genLevel || pet.genLevel || 0));
   const safeBt = Math.max(0, Math.min(5, petBreakthrough || 0));
-  const lvMult = 1 + (safeLv - 1) * 0.08;
-  const starMult = 1 + (safeStars - 1) * 0.12;
-  const genMult = 1 + safeGen * 0.1;
-  const btMult = 1 + safeBt * 0.12;
+  const lvMult = 1 + (safeLv - 1) * 0.065;
+  const starMult = 1 + (safeStars - 1) * 0.08;
+  const genMult = 1 + safeGen * 0.06;
+  const btMult = 1 + safeBt * 0.08;
   const mult = lvMult * starMult * genMult * btMult;
 
   return {
@@ -5158,7 +5227,7 @@ export function applyPetProgression(
     attack: Math.round(pet.attack * mult),
     magic: Math.round(pet.magic * mult),
     defense: Math.round(pet.defense * mult),
-    speed: Math.round(pet.speed + (safeLv - 1) * 2 + (safeStars - 1) * 4 + safeGen * 3 + safeBt * 5),
+    speed: Math.round(pet.speed + (safeLv - 1) * 2 + (safeStars - 1) * 3 + safeGen * 2 + safeBt * 4),
   };
 }
 

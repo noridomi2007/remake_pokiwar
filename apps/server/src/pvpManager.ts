@@ -8,6 +8,7 @@ import {
   executeSwap,
   getAvatarById,
   getPetById,
+  MAX_PET_LEVEL,
   passTurn,
   type BattleEvent,
   type BattleState,
@@ -281,7 +282,7 @@ export class PvpManager {
   ) {
     conn.petId = meta.petId;
     conn.name = meta.playerName.trim().slice(0, 20) || 'Chiến binh';
-    conn.petLevel = Math.max(1, Math.min(30, meta.petLevel ?? 1));
+    conn.petLevel = Math.max(1, Math.min(MAX_PET_LEVEL, meta.petLevel ?? 1));
     conn.petTier = meta.petTier;
     conn.avatarId = meta.avatarId;
   }

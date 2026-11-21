@@ -21,6 +21,7 @@ import {
   getPetById,
   getPetSpriteId,
   getPetSpritePath,
+  MAX_PET_LEVEL,
   ONLINE_REWARDS,
   passTurn,
   PET_BREAKTHROUGH_GEN_COSTS,
@@ -77,6 +78,13 @@ function normalizeProgress(parsed?: Partial<PlayerProgress> | null): PlayerProgr
       ? 'pet-1431'
       : 'pet-583';
   const legacyLvMap = (parsed?.petLevels ?? {}) as Record<string, number>;
+  const clampedPetLevels: Record<string, number> = {};
+  for (const [pid, rawLv] of Object.entries(legacyLvMap)) {
+    const n = typeof rawLv === 'number' && Number.isFinite(rawLv) ? Math.floor(rawLv) : 1;
+    clampedPetLevels[pid] = Math.max(1, Math.min(MAX_PET_LEVEL, n));
+  }
+  const migratedLv = clampedPetLevels[migratedPetId] ?? clampedPetLevels['pet-5880'] ?? 1;
+  clampedPetLevels[migratedPetId] = Math.max(1, Math.min(MAX_PET_LEVEL, migratedLv));
   const defaultUnlocked = Array.from(new Set([migratedPetId, 'pet-581', 'pet-583', 'pet-1431', 'pet-725']));
   return {
     name: parsed?.name ?? 'Potter',
@@ -143,10 +151,7 @@ function normalizeProgress(parsed?: Partial<PlayerProgress> | null): PlayerProgr
     eggSmashCount: parsed?.eggSmashCount ?? 0,
     claimedEggMilestones: parsed?.claimedEggMilestones ?? [],
     selectedPetId: migratedPetId,
-    petLevels: {
-      ...legacyLvMap,
-      [migratedPetId]: legacyLvMap[migratedPetId] ?? legacyLvMap['pet-5880'] ?? 1,
-    },
+    petLevels: clampedPetLevels,
     petTiers: parsed?.petTiers ?? {},
     clearedStages: parsed?.clearedStages ?? [],
     claimedMissions: parsed?.claimedMissions ?? [],
@@ -1466,7 +1471,10 @@ export function App() {
     useMayMan: boolean,
     stackedStones?: [number, number, number, number, number],
   ): { success: boolean; message: string } => {
-    const curLv = progress.petLevels[petId] ?? 1;
+    const curLv = Math.max(1, Math.min(MAX_PET_LEVEL, progress.petLevels[petId] ?? 1));
+    if (curLv >= MAX_PET_LEVEL) {
+      return { success: false, message: `👑 Pet đã đạt cấp tối đa Lv.${MAX_PET_LEVEL}/${MAX_PET_LEVEL}!` };
+    }
     const bag = [...(progress.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
     const charms = { ...(progress.charms ?? { binhAn: 2, mayMan: 2 }) };
     const accLuck = progress.petUpgradeLuck?.[petId] ?? 0;
@@ -1509,9 +1517,9 @@ export function App() {
     let nextLuck = accLuck;
     let message = '';
     if (succeeded) {
-      nextLv = curLv + 1;
+      nextLv = Math.min(MAX_PET_LEVEL, curLv + 1);
       nextLuck = 0;
-      message = `Đập Level thành công lên Lv.${nextLv} (${rate}%)!`;
+      message = `Đập Level thành công lên Lv.${nextLv}/${MAX_PET_LEVEL} (${rate}%)!`;
       if (nextLv >= 12) {
         broadcastAnnounce(`Chúc mừng ${progress.name} nâng cấp ${getPetById(petId).name} lên Lv.${nextLv}!`);
       }
@@ -1618,7 +1626,7 @@ export function App() {
 
     return {
       success: true,
-      message: `⭐ Siêu Tiến Hóa thành công: ${base.name} tăng lên ${curStars + 1}★ (+12% toàn chỉ số)!`,
+      message: `⭐ Siêu Tiến Hóa thành công: ${base.name} tăng lên ${curStars + 1}★ (+8% toàn chỉ số)!`,
     };
   };
 
@@ -1657,7 +1665,7 @@ export function App() {
       message:
         nextGen === 3
           ? `🧬 Nâng Gen Lv.3 thành công! ${base.name} đã mở khóa ❤️ Tim Hồi Sinh trong trận!`
-          : `🧬 Nâng Gen T2 cho ${base.name} lên Lv.${nextGen} (+10% toàn chỉ số)!`,
+          : `🧬 Nâng Gen T2 cho ${base.name} lên Lv.${nextGen} (+6% toàn chỉ số)!`,
     };
   };
 
@@ -1837,7 +1845,7 @@ export function App() {
     });
     return {
       success: true,
-      message: `⚡ Xung Phá Cực Hạn lên Lv.${curLv + 1} thành công (+180 HP, +24 Công/Phép, +16 Thủ, +3 Tốc)!`,
+      message: `⚡ Xung Phá Cực Hạn lên Lv.${curLv + 1} thành công (+105 HP, +14 Công/Phép, +10 Thủ, +2 Tốc)!`,
     };
   };
 
@@ -2172,7 +2180,7 @@ export function App() {
           if (!unlocked.includes(p.id)) {
             unlocked.push(p.id);
           }
-          petLevels[p.id] = Math.max(petLevels[p.id] ?? 1, 10);
+          petLevels[p.id] = Math.min(MAX_PET_LEVEL, Math.max(petLevels[p.id] ?? 1, 10));
         }
       }
 

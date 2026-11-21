@@ -1,3 +1,4 @@
+import { MAX_PET_LEVEL } from '@pokiwar/shared';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,6 +34,22 @@ function verifyPassword(password: string, salt: string, storedHex: string): bool
   const expected = Buffer.from(storedHex, 'hex');
   if (derived.length !== expected.length) return false;
   return timingSafeEqual(derived, expected);
+}
+
+function clampProgressPetLevels(progress: Record<string, unknown>): boolean {
+  const rawLevels = progress.petLevels;
+  if (!rawLevels || typeof rawLevels !== 'object') return false;
+  const levels = rawLevels as Record<string, unknown>;
+  let changed = false;
+  for (const [petId, rawVal] of Object.entries(levels)) {
+    const num = typeof rawVal === 'number' && Number.isFinite(rawVal) ? Math.floor(rawVal) : 1;
+    const clamped = Math.max(1, Math.min(MAX_PET_LEVEL, num));
+    if (levels[petId] !== clamped) {
+      levels[petId] = clamped;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 export function createStarterProgress(displayName: string, starterPetId = 'pet-583'): Record<string, unknown> {
@@ -137,9 +154,15 @@ export class AuthManager {
     ];
 
     let changed = false;
+    for (const acc of this.accounts.values()) {
+      if (clampProgressPetLevels(acc.progress)) {
+        changed = true;
+      }
+    }
     for (const v of vipClones) {
       if (!this.accounts.has(v.username)) {
         const clonedProgress = JSON.parse(JSON.stringify(baseVip.progress)) as Record<string, unknown>;
+        clampProgressPetLevels(clonedProgress);
         clonedProgress.name = v.displayName;
         clonedProgress.avatarId = v.avatarId;
         clonedProgress.selectedPetId = v.selectedPetId;
@@ -263,6 +286,7 @@ export class AuthManager {
     if (!sess) return false;
     const record = this.accounts.get(sess.username);
     if (!record) return false;
+    clampProgressPetLevels(progress);
     record.progress = progress;
     if (typeof progress.name === 'string' && progress.name.trim()) {
       record.displayName = progress.name.trim().slice(0, 20);

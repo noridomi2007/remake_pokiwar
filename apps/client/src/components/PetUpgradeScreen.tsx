@@ -9,6 +9,7 @@ import {
   getPetById,
   getPetSpriteId,
   getPetSpritePath,
+  MAX_PET_LEVEL,
   PET_BREAKTHROUGH_GEN_COSTS,
   PET_BREAKTHROUGH_GOLD_COSTS,
   PET_BREAKTHROUGH_SHARD_COSTS,
@@ -155,7 +156,8 @@ export function PetUpgradeScreen({
   const SHARD_UNLOCK_COST = 30;
   const GOLD_UNLOCK_COST = 1200;
   const dropStages = PVE_STAGES.filter((st) => st.enemyPetId === basePet.id);
-  const currentLv = progress.petLevels[basePet.id] ?? 1;
+  const currentLv = Math.max(1, Math.min(MAX_PET_LEVEL, progress.petLevels[basePet.id] ?? 1));
+  const isMaxLevel = currentLv >= MAX_PET_LEVEL;
   const currentTier = basePet.tier;
   const starCount = Math.max(1, Math.min(6, petStars[basePet.id] ?? 1));
   const genLevel = Math.max(0, Math.min(5, petGenLevels[basePet.id] ?? 0));
@@ -163,7 +165,14 @@ export function PetUpgradeScreen({
   const accLuck = petUpgradeLuck[basePet.id] ?? 0;
 
   const currentPet = applyPetProgression(basePet, currentLv, currentTier, starCount, genLevel, petBtLevel);
-  const nextLvPet = applyPetProgression(basePet, currentLv + 1, currentTier, starCount, genLevel, petBtLevel);
+  const nextLvPet = applyPetProgression(
+    basePet,
+    Math.min(MAX_PET_LEVEL, currentLv + 1),
+    currentTier,
+    starCount,
+    genLevel,
+    petBtLevel,
+  );
   const nextStarPet =
     starCount < 6 ? applyPetProgression(basePet, currentLv, currentTier, starCount + 1, genLevel, petBtLevel) : null;
 
@@ -223,7 +232,10 @@ export function PetUpgradeScreen({
 
   const selectedStoneCount = stoneBag[selectedStoneLv - 1] ?? 0;
   const canAffordUpgrade =
-    isPetUnlocked && progress.gold >= upGold && (totalStackedCount > 0 || selectedStoneCount > 0 || progress.stones >= upStones);
+    !isMaxLevel &&
+    isPetUnlocked &&
+    progress.gold >= upGold &&
+    (totalStackedCount > 0 || selectedStoneCount > 0 || progress.stones >= upStones);
   const canAffordStarUpgrade =
     isPetUnlocked && starCount < 6 && shardCount >= nextStarShardCost && progress.gold >= nextStarGoldCost;
   const canAffordGenUpgrade =
@@ -633,7 +645,7 @@ export function PetUpgradeScreen({
                   disabled={!canAffordUpgrade}
                   onClick={handleTriggerUpgrade}
                 >
-                  NÂNG Lv.{currentLv + 1} ({upGold}V)
+                  {isMaxLevel ? `👑 MAX Lv.${MAX_PET_LEVEL}` : `NÂNG Lv.${currentLv + 1} (${upGold}V)`}
                 </button>
               </div>
             ) : (
@@ -697,7 +709,7 @@ export function PetUpgradeScreen({
                   {TIER_LABELS[basePet.tier]}
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 900, color: '#fde047' }}>
-                  ⭐ {starCount}/5 Sao (+{(starCount - 1) * 12}% Chỉ số)
+                  ⭐ {starCount}/6 Sao (+{(starCount - 1) * 8}% Chỉ số)
                 </span>
               </div>
 
@@ -814,13 +826,25 @@ export function PetUpgradeScreen({
                 }}
               >
                 <div style={{ color: '#cbd5e1' }}>
-                  Lv.{currentLv + 1}: <strong style={{ color: '#4ade80' }}>LC {nextLvPower}</strong>
+                  {isMaxLevel ? (
+                    <strong style={{ color: '#fde047' }}>👑 Đã đạt cấp tối đa Lv.{MAX_PET_LEVEL}/{MAX_PET_LEVEL}!</strong>
+                  ) : (
+                    <>
+                      Lv.{currentLv + 1}: <strong style={{ color: '#4ade80' }}>LC {nextLvPower}</strong>
+                    </>
+                  )}
                 </div>
                 <div style={{ fontSize: 9.5, color: '#fde047', fontWeight: 800 }}>
                   Tích lũy xịt: +{accLuck}% • Gen T2: Lv.{genLevel}/5 • Đột Phá: +{petBtLevel}/5
                 </div>
-                <div style={{ fontSize: 9.5, color: hasBinhAn ? '#86efac' : '#fca5a5', fontWeight: 700 }}>
-                  {hasBinhAn ? 'Bùa Bình An: Bảo vệ' : upgradeRate < 100 ? 'Xịt tụt 1 Lv (+10% tích lũy)' : 'An toàn 100%'}
+                <div style={{ fontSize: 9.5, color: isMaxLevel ? '#fde047' : hasBinhAn ? '#86efac' : '#fca5a5', fontWeight: 700 }}>
+                  {isMaxLevel
+                    ? 'Nâng Sao, Gen T2 & Đột Phá để tăng lực chiến!'
+                    : hasBinhAn
+                      ? 'Bùa Bình An: Bảo vệ'
+                      : upgradeRate < 100
+                        ? 'Xịt tụt 1 Lv (+10% tích lũy)'
+                        : 'An toàn 100%'}
                 </div>
               </div>
 
@@ -862,11 +886,11 @@ export function PetUpgradeScreen({
                 }}
               >
                 <span className="pk-num-font" style={{ fontSize: 13, color: '#ffe08a' }}>
-                  Lv {currentLv}
+                  Lv {currentLv}/{MAX_PET_LEVEL}
                 </span>
                 <span style={{ color: '#94a3b8' }}>•</span>
-                <span className="pk-num-font" style={{ fontSize: 13, color: '#4ade80' }}>
-                  {upgradeRate}%
+                <span className="pk-num-font" style={{ fontSize: 13, color: isMaxLevel ? '#fde047' : '#4ade80' }}>
+                  {isMaxLevel ? 'MAX' : `${upgradeRate}%`}
                 </span>
                 {(genLevel >= 3 || basePet.passiveSkill?.kind === 'HOI_SINH') && (
                   <span style={{ fontSize: 11, color: '#fb7185', fontWeight: 900 }}>❤️ Hồi Sinh</span>
@@ -979,7 +1003,7 @@ export function PetUpgradeScreen({
                   style={{ height: 36, fontSize: 10 }}
                   disabled={!canAffordStarUpgrade}
                   onClick={handleTriggerStarUpgrade}
-                  title="Siêu Tiến Hóa Nâng Sao 1★→6★ (+12% toàn chỉ số mỗi sao)"
+                  title="Siêu Tiến Hóa Nâng Sao 1★→6★ (+8% toàn chỉ số mỗi sao)"
                 >
                   {starCount < 6
                     ? `⭐ ${starCount + 1}★ (${shardCount}/${nextStarShardCost}M)`
@@ -1011,11 +1035,11 @@ export function PetUpgradeScreen({
                   }}
                   disabled={!canAffordPetBreakthrough}
                   onClick={handleTriggerPetBreakthrough}
-                  title="Đột Phá Pet Pokiwar 4.0 (+12% Toàn Chỉ Số & +5 Tốc mỗi cấp, ngang tầm F11/F12!)"
+                  title="Đột Phá Pet Pokiwar 4.0 (+8% Toàn Chỉ Số & +3 Tốc mỗi cấp!)"
                 >
                   {petBtLevel < 5
                     ? `⚡ ĐỘT PHÁ PET +${petBtLevel + 1} (${nextBtShardCost}M • ${nextBtGenCost}Gen • ${nextBtGoldCost}V)`
-                    : '👑 ĐỘT PHÁ TỐI ĐA (+5 • +60% CHỈ SỐ)'}
+                    : '👑 ĐỘT PHÁ TỐI ĐA (+5 • +40% CHỈ SỐ)'}
                 </button>
               </div>
             )}
@@ -1181,7 +1205,9 @@ export function PetUpgradeScreen({
               disabled={!canAffordUpgrade}
               onClick={handleTriggerUpgrade}
             >
-              ĐẬP LEVEL Lv.{currentLv + 1} ({totalStackedCount > 0 ? `${totalStackedCount} Đá • ${upgradeRate}%` : `${upStones} Đá`} • {upGold}V)
+              {isMaxLevel
+                ? `👑 ĐÃ ĐẠT LEVEL TỐI ĐA (Lv.${MAX_PET_LEVEL}/${MAX_PET_LEVEL})`
+                : `ĐẬP LEVEL Lv.${currentLv + 1} (${totalStackedCount > 0 ? `${totalStackedCount} Đá • ${upgradeRate}%` : `${upStones} Đá`} • ${upGold}V)`}
             </button>
           </div>
         </div>
@@ -1591,7 +1617,7 @@ export function PetUpgradeScreen({
                 ) : starCount < 6 && nextStarPet ? (
                   <>
                     <div style={{ fontSize: 11.5, color: '#e2e8f0' }}>
-                      Nâng lên <strong style={{ color: '#fde047' }}>{starCount + 1}★</strong> (+12% toàn chỉ số, giữ nguyên ngoại hình):{' '}
+                      Nâng lên <strong style={{ color: '#fde047' }}>{starCount + 1}★</strong> (+8% toàn chỉ số, giữ nguyên ngoại hình):{' '}
                       HP <strong style={{ color: '#4ade80' }}>{currentPet.maxHp} → {nextStarPet.maxHp}</strong> • Công{' '}
                       <strong style={{ color: '#fb923c' }}>{currentPet.attack} → {nextStarPet.attack}</strong>
                     </div>

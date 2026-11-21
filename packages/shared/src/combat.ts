@@ -200,14 +200,23 @@ export function createBattleState(
     restrictedRules: p1Bonuses?.restrictedRules,
   });
   if (p1Bonuses?.isBossEncounter) {
-    p2.maxHp = Math.round(p2.maxHp * 1.65);
+    // True Pokiwar Hardcore Boss Empowerment: high HP pool, lethal ATK/MAG, thick Shield, Revive hearts & Shield Regen!
+    p2.maxHp = Math.round(p2.maxHp * 2.75);
     p2.hp = p2.maxHp;
-    p2.attack = Math.round(p2.attack * 1.22);
-    p2.magic = Math.round(p2.magic * 1.22);
-    p2.defense = Math.round(p2.defense * 1.18);
-    p2.shield = Math.max(p2.shield, Math.round(p2.maxHp * 0.22));
-    p2.rage = Math.min(p2.maxRage, p2.rage + 45);
-    p2.mana = Math.min(p2.maxMana, p2.mana + 70);
+    p2.attack = Math.round(p2.attack * 1.58);
+    p2.magic = Math.round(p2.magic * 1.58);
+    p2.defense = Math.round(p2.defense * 1.45);
+    p2.shield = Math.max(p2.shield, Math.round(p2.maxHp * 0.38));
+    p2.rage = Math.min(p2.maxRage, p2.rage + 95);
+    p2.mana = Math.min(p2.maxMana, p2.mana + 150);
+    const bossRevives = p2Scale >= 2.6 ? 2 : 1;
+    p2.reviveCharges = Math.max(p2.reviveCharges ?? 0, bossRevives);
+    p2.maxReviveCharges = Math.max(p2.maxReviveCharges ?? 0, p2.reviveCharges);
+    p2.statuses.push({
+      kind: 'SHIELD_REGEN',
+      value: Math.round(p2.maxHp * 0.05),
+      remainingTurns: 3,
+    });
   }
   // Pokiwar classic rule: Player moves first unless faster PvP opponent is P2
   const firstTurn: Side = p1.speed >= p2.speed ? 'P1' : 'P2';
@@ -265,8 +274,8 @@ function tryReviveFighter(fighter: BattleFighter, events: BattleEvent[]): boolea
 }
 
 function getRageDamageMultiplier(rage: number): number {
-  if (rage >= 200) return 1.55;
-  if (rage >= 100) return 1.28;
+  if (rage >= 200) return 1.42;
+  if (rage >= 100) return 1.22;
   return 1.0;
 }
 
@@ -307,11 +316,11 @@ function computeGemEffects(
     const baseStat = getEffectiveAttack(attacker, state.fieldElement);
     const rageBuff = getRageDamageMultiplier(attacker.rage);
     const pierceRatio = attacker.passiveSkill?.kind === 'XUYEN_GIAP' ? attacker.passiveSkill.value || 0.35 : 0;
-    const mitigation = 100 / (100 + defender.defense * (1 - pierceRatio) * 0.72);
+    const mitigation = 130 / (130 + defender.defense * (1 - pierceRatio) * 0.85);
     const isCrit = rng.next() < 0.14;
-    const critMult = isCrit ? 1.5 : 1.0;
+    const critMult = isCrit ? 1.45 : 1.0;
     const rawDamage =
-      baseStat * 1.15 * scaleFactor * rageBuff * comboMultiplier * elemMult * mitigation * critMult;
+      baseStat * 0.94 * scaleFactor * rageBuff * comboMultiplier * elemMult * mitigation * critMult;
     const { hpDamage, shieldAbsorbed } = applyDamage(defender, rawDamage);
     const totalDealt = hpDamage + shieldAbsorbed;
     const rageMult = attacker.passiveSkill?.kind === 'CUONG_NO' ? 1.35 : 1;
@@ -1235,10 +1244,10 @@ function applySkillBoardEffect(
       }
     }
     const pts = clearPositionsAndCascade(positions, state, attacker, defender, rng, events, 1.8, true);
-    // Bonus burst damage scaled directly by number of consumed gems (authentic Pokiwar 4.0 formula!)
+    // Bonus burst damage scaled by number of consumed gems (rebalanced to avoid 1-shotting Bosses)
     if (pts > 0 && defender.hp > 0) {
       const elemM = getElementMultiplier(attacker.element, defender.element);
-      const bonusRaw = Math.max(attacker.attack, attacker.magic) * (0.14 * pts) * elemM;
+      const bonusRaw = Math.max(attacker.attack, attacker.magic) * (0.075 * pts) * elemM;
       applyDamage(defender, bonusRaw);
     }
     if (skill.spawnMultipliersAfter) {
@@ -1364,7 +1373,7 @@ export function executeSkill(
       defender.hp > 0 &&
       defender.hp / Math.max(1, defender.maxHp) <= skill.executeThresholdPercent
     ) {
-      const execRaw = Math.round(defender.maxHp * 0.22);
+      const execRaw = Math.min(Math.round(attacker.maxHp * 1.6), Math.round(defender.maxHp * 0.16));
       const execRes = applyDamage(defender, execRaw);
       damage += execRes.hpDamage + execRes.shieldAbsorbed;
       shieldAbsorbed += execRes.shieldAbsorbed;
@@ -1582,17 +1591,20 @@ export function chooseBotDecision(state: BattleState, difficulty: BotDifficulty)
         .sort((a, b) => b.powerRatio - a.powerRatio)[0];
       if (
         damageSkill &&
-        (difficulty === 'HARD' || player.hp < player.maxHp * 0.65 || bot.rage >= bot.maxRage * 0.65)
+        (difficulty === 'HARD' || player.hp < player.maxHp * 0.72 || bot.rage >= bot.maxRage * 0.55)
       ) {
         return {
           kind: 'SKILL',
           skillId: damageSkill.id,
-          qteGrade: difficulty === 'HARD' ? 'GOOD' : 'BAD',
+          qteGrade: difficulty === 'HARD' ? (bot.hp < bot.maxHp * 0.65 ? 'PERFECT' : 'GOOD') : 'GOOD',
         };
       }
     }
 
-    if (bot.mana >= MATCH_CONSTANTS.DEFAULT_CAST_MANA_COST && player.hp <= bot.magic * 2.5) {
+    if (
+      bot.mana >= MATCH_CONSTANTS.DEFAULT_CAST_MANA_COST &&
+      (difficulty === 'HARD' || player.hp <= bot.magic * 3.0)
+    ) {
       return { kind: 'DEFAULT_CAST' };
     }
   }
@@ -1616,14 +1628,14 @@ export function chooseBotDecision(state: BattleState, difficulty: BotDifficulty)
     let score = 0;
 
     for (const g of groups) {
-      score += g.effectiveValue * 10;
-      if (g.isExtraTurn) score += difficulty === 'HARD' ? 45 : 25;
-      if (g.gemType === 'SWORD') score += 18;
-      if (g.gemType === 'FIRE' && bot.rage < bot.maxRage) score += 15;
-      if (g.gemType === 'LIGHTNING' && bot.mana < bot.maxMana) score += 14;
-      if (g.gemType === 'HEART' && bot.hp < bot.maxHp * 0.65) score += 24;
-      if (g.gemType === 'COIN' && bot.shield < bot.maxHp * 0.25) score += 13;
-      if (g.gemType === 'YINYANG' && (bot.accumStacks ?? 0) < 14) score += 12;
+      score += g.effectiveValue * 11;
+      if (g.isExtraTurn) score += difficulty === 'HARD' ? 58 : 32;
+      if (g.gemType === 'SWORD') score += 20;
+      if (g.gemType === 'FIRE' && bot.rage < bot.maxRage) score += 16;
+      if (g.gemType === 'LIGHTNING' && bot.mana < bot.maxMana) score += 16;
+      if (g.gemType === 'HEART' && bot.hp < bot.maxHp * 0.7) score += 26;
+      if (g.gemType === 'YINYANG' && bot.shield < bot.maxHp * 0.25) score += 15;
+      if (g.gemType === 'COIN') score += 14;
     }
 
     if (score > bestScore) {

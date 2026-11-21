@@ -9,13 +9,13 @@ import type {
 } from './types.js';
 
 function makeUnitState(side: Side, inp: KingArenaUnitInput): KingArenaUnitState {
-  const safeLv = Math.max(1, inp.level);
+  const safeLv = Math.max(1, Math.min(15, inp.level));
   const safeStars = Math.max(1, Math.min(6, inp.stars));
   const safeGen = Math.max(0, Math.min(5, inp.genLevel));
 
-  const lvMult = 1 + (safeLv - 1) * 0.08;
-  const starMult = 1 + (safeStars - 1) * 0.12;
-  const genMult = 1 + safeGen * 0.1;
+  const lvMult = 1 + (safeLv - 1) * 0.065;
+  const starMult = 1 + (safeStars - 1) * 0.08;
+  const genMult = 1 + safeGen * 0.06;
   const mult = lvMult * starMult * genMult;
 
   const maxHp = Math.round(inp.pet.maxHp * mult * 1.45);

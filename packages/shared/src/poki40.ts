@@ -108,9 +108,9 @@ export function computeAuraTotalBonuses(ownedAuraIds: string[] = []): {
   for (const id of new Set(ownedAuraIds)) {
     const a = getAuraById(id);
     if (a) {
-      hpBonus += a.hpBonus;
-      atkBonus += a.atkBonus;
-      defenseBonus += a.defenseBonus;
+      hpBonus += Math.round(a.hpBonus * 0.52);
+      atkBonus += Math.round(a.atkBonus * 0.52);
+      defenseBonus += Math.round(a.defenseBonus * 0.52);
     }
   }
   return { hpBonus, atkBonus, defenseBonus };
@@ -157,19 +157,19 @@ export function computeEquipmentBonuses(
   equippedBySlot: Partial<Record<EquipmentSlot, string>> = {},
   breakthroughLv = 0,
 ): { hpBonus: number; atkBonus: number; magicBonus: number; defenseBonus: number; speedBonus: number } {
-  let hpBonus = breakthroughLv * 180;
-  let atkBonus = breakthroughLv * 24;
-  let magicBonus = breakthroughLv * 24;
-  let defenseBonus = breakthroughLv * 16;
-  let speedBonus = breakthroughLv * 3;
+  let hpBonus = breakthroughLv * 105;
+  let atkBonus = breakthroughLv * 14;
+  let magicBonus = breakthroughLv * 14;
+  let defenseBonus = breakthroughLv * 10;
+  let speedBonus = breakthroughLv * 2;
   for (const eqId of Object.values(equippedBySlot)) {
     const item = CHARACTER_EQUIPMENT.find((e) => e.id === eqId);
     if (item) {
-      hpBonus += item.hpBonus;
-      atkBonus += item.atkBonus;
-      magicBonus += item.magicBonus;
-      defenseBonus += item.defenseBonus;
-      speedBonus += item.speedBonus;
+      hpBonus += Math.round(item.hpBonus * 0.55);
+      atkBonus += Math.round(item.atkBonus * 0.55);
+      magicBonus += Math.round(item.magicBonus * 0.55);
+      defenseBonus += Math.round(item.defenseBonus * 0.55);
+      speedBonus += Math.round(item.speedBonus * 0.7);
     }
   }
   return { hpBonus, atkBonus, magicBonus, defenseBonus, speedBonus };
@@ -290,6 +290,7 @@ export function calcMultiStoneUpgradeRate(
   accumulatedLuck = 0,
   useMayMan = false,
 ): number {
+  if (currentLv >= 15) return 0;
   if (currentLv <= 2) return 100;
   const weights = [8, 14, 22, 34, 52];
   let stonePower = 0;
@@ -297,7 +298,7 @@ export function calcMultiStoneUpgradeRate(
     stonePower += (selectedStones[i] ?? 0) * weights[i];
   }
   if (stonePower <= 0) return 0;
-  const lvPenalty = Math.max(0, currentLv - 3) * 5;
-  const base = 36 + stonePower - lvPenalty + accumulatedLuck + (useMayMan ? 15 : 0);
+  const lvPenalty = Math.max(0, currentLv - 3) * 6;
+  const base = 34 + stonePower - lvPenalty + accumulatedLuck + (useMayMan ? 15 : 0);
   return Math.max(5, Math.min(100, Math.round(base)));
 }
