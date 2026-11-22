@@ -177,19 +177,19 @@ export function computeEquipmentBonuses(
 
 // ==================== 3. SHOP VINH QUANG (XU ĐẤU TRƯỜNG) & SHOP RƯƠNG ====================
 export const GLORY_SHOP_ITEMS: readonly GloryShopItemDef[] = [
-  { id: 'gs-1', kind: 'SHARD', name: '+15 Mảnh Fantasy Joker', icon: '/assets/pokiguard/pets/pw_fantasy_joker.png', refId: 'pet-fantasy-joker', amount: 15, baseCostGlory: 360, salePercent: 20, rarity: 'LEGENDARY' },
-  { id: 'gs-2', kind: 'SHARD', name: '+15 Mảnh Primal Orithyia', icon: '/assets/pokiguard/pets/pw_primal_orithyia.png', refId: 'pet-primal-orithyia', amount: 15, baseCostGlory: 350, salePercent: 20, rarity: 'LEGENDARY' },
-  { id: 'gs-3', kind: 'SHARD', name: '+15 Mảnh Galaxy Chess Master', icon: '/assets/pokiguard/pets/pw_galaxy_chess_master.png', refId: 'pet-3090', amount: 15, baseCostGlory: 280, salePercent: 30, rarity: 'EPIC' },
-  { id: 'gs-4', kind: 'SHARD', name: '+15 Mảnh Galaxy Shadow Sword', icon: '/assets/pokiguard/pets/pw_galaxy_shadow_sword.png', refId: 'pet-galaxy-shadow-sword', amount: 15, baseCostGlory: 310, salePercent: 25, rarity: 'LEGENDARY' },
-  { id: 'gs-5', kind: 'SHARD', name: '+15 Mảnh Galaxy Dragon Knight', icon: '/assets/pokiguard/pets/pw_galaxy_dragon_knight.png', refId: 'pet-galaxy-dragon-knight', amount: 15, baseCostGlory: 300, salePercent: 20, rarity: 'LEGENDARY' },
+  { id: 'gs-1', kind: 'SHARD', name: '+15 Mảnh Ancient Rayquaza', icon: '/assets/pokiguard/pets/pw_ancient_rayquaza.png', refId: 'pet-ancient-rayquaza', amount: 15, baseCostGlory: 420, salePercent: 20, rarity: 'LEGENDARY' },
+  { id: 'gs-2', kind: 'SHARD', name: '+15 Mảnh Ancient Arceus', icon: '/assets/pokiguard/pets/pw_ancient_arceus.png', refId: 'pet-ancient-arceus', amount: 15, baseCostGlory: 400, salePercent: 20, rarity: 'LEGENDARY' },
+  { id: 'gs-3', kind: 'SHARD', name: '+15 Mảnh Fantasy Joker', icon: '/assets/pokiguard/pets/pw_fantasy_joker.png', refId: 'pet-fantasy-joker', amount: 15, baseCostGlory: 360, salePercent: 20, rarity: 'LEGENDARY' },
+  { id: 'gs-4', kind: 'SHARD', name: '+15 Mảnh Galaxy Chess Master', icon: '/assets/pokiguard/pets/pw_galaxy_chess_master.png', refId: 'pet-3090', amount: 15, baseCostGlory: 280, salePercent: 30, rarity: 'EPIC' },
+  { id: 'gs-5', kind: 'SHARD', name: '+15 Mảnh Galaxy Shadow Sword', icon: '/assets/pokiguard/pets/pw_galaxy_shadow_sword.png', refId: 'pet-galaxy-shadow-sword', amount: 15, baseCostGlory: 310, salePercent: 25, rarity: 'LEGENDARY' },
   { id: 'gs-6', kind: 'GEN_CORE', name: '+5 Tinh Thể Gen T2', icon: '/assets/pokiguard/sprites/crystal.png', amount: 5, baseCostGlory: 180, salePercent: 30, rarity: 'EPIC' },
   { id: 'gs-7', kind: 'STONE_LV5', name: '+3 Đá Cấp 5', icon: '/assets/pokiguard/sprites/stone_m_5.png', amount: 3, baseCostGlory: 200, salePercent: 50, rarity: 'EPIC' },
-  { id: 'gs-8', kind: 'CHARM', name: '+3 Bùa May Mắn & Bình An', icon: '/assets/pokiguard/sprites/charm_may_man.png', amount: 3, baseCostGlory: 160, salePercent: 25, rarity: 'RARE' },
+  { id: 'gs-8', kind: 'STONE_LV4', name: '+4 Đá Cấp 4', icon: '/assets/pokiguard/sprites/stone_m_4.png', amount: 4, baseCostGlory: 160, salePercent: 25, rarity: 'RARE' },
 ];
 
 export const SHOP_CHESTS: readonly ChestDef[] = [
   { id: 'chest-starter', name: 'Rương Tân Thủ', description: 'Mở ra Vàng, Đá C2–C3 & Mảnh Pet S ngẫu nhiên.', icon: '/assets/pokiguard/sprites/chest_big.png', costGold: 500, tier: 'STARTER' },
-  { id: 'chest-warrior', name: 'Rương Chiến Binh', description: 'Mở ra Đá C3–C4, Bùa & +12 Mảnh Mega/Huyền Thoại.', icon: '/assets/pokiguard/sprites/chest_big.png', costGold: 1200, tier: 'WARRIOR' },
+  { id: 'chest-warrior', name: 'Rương Chiến Binh', description: 'Mở ra Đá C3–C4 & +12 Mảnh Mega/Huyền Thoại.', icon: '/assets/pokiguard/sprites/chest_big.png', costGold: 1200, tier: 'WARRIOR' },
   { id: 'chest-artifact', name: 'Rương Thần Khí', description: 'Mở ra Tinh Thể Gen, Xu Vinh Quang & +15 Mảnh Galaxy/Fantasy.', icon: '/assets/pokiguard/sprites/chest_big_open.png', costGold: 2200, tier: 'ARTIFACT' },
   { id: 'chest-ancient', name: 'Rương Thượng Cổ', description: 'Cơ hội cao mở Full Pet Ancient / Titan hoặc +20 Mảnh hiếm!', icon: '/assets/pokiguard/sprites/chest_big_open.png', costGold: 0, costGlory: 280, tier: 'ANCIENT' },
 ];
@@ -274,31 +274,50 @@ export const DEFAULT_MAILS: readonly MailItemDef[] = [
   },
 ];
 
-// ==================== 7. NÂNG CẤP PET 4.0: TÍCH LŨY MAY MẮN, XẾP NHANH & NÂNG GEN ====================
+// ==================== 7. NÂNG CẤP PET 4.0: LẮP 3 Ô ĐÁ, TÍCH LŨY & NÂNG GEN ====================
 export const GEN_UPGRADE_CORE_COSTS = [2, 4, 7, 11, 16] as const;
 export const GEN_UPGRADE_GOLD_COSTS = [600, 1200, 2200, 3600, 5500] as const;
 
+export const MAX_UPGRADE_STONE_SLOTS = 3;
+export const BASE_SINGLE_STONE_RATES = [34, 46, 60, 76, 96] as const;
+
 /**
- * Tính tỉ lệ đập Level chuẩn Pokiwar 4.0 Zing Me:
- * - Hỗ trợ Xếp Nhanh nhiều viên đá cùng lúc (stonesUsed = [c1, c2, c3, c4, c5])
- * - Cộng dồn % Tích Lũy May Mắn từ những lần xịt trước (accumulatedLuck)
- * - Cộng +15% khi dùng Bùa May Mắn
+ * Tỉ lệ thành công của TỪNG VIÊN ĐÁ (C1..C5) theo cấp hiện tại của Pet (Lv.1 -> Lv.14):
+ * - Cấp Pet càng cao, tỉ lệ thành công của mỗi viên đá càng giảm dần.
+ * - Khi Pet đạt cấp tối đa (Lv.15) trả về 0%.
+ */
+export function getSingleStoneUpgradeRate(currentLv: number, stoneLv: number): number {
+  if (currentLv >= 15) return 0;
+  const lv = Math.max(1, Math.min(14, Math.floor(currentLv)));
+  const idx = Math.max(0, Math.min(4, Math.floor(stoneLv) - 1));
+  const decay = Math.max(0.24, 1 - (lv - 1) * 0.058);
+  return Math.max(3, Math.round(BASE_SINGLE_STONE_RATES[idx] * decay));
+}
+
+/**
+ * Tính tổng tỉ lệ đập Level bằng cơ chế Lắp tối đa 3 Ô Đá:
+ * - Cộng dồn tỉ lệ từng viên đá (giảm dần theo cấp Pet) của tối đa 3 viên đá lắp vào.
+ * - Cộng thêm % Tích Lũy từ những lần thất bại trước (accumulatedLuck).
+ * - Không sử dụng Bùa, không tụt cấp khi thất bại.
  */
 export function calcMultiStoneUpgradeRate(
   currentLv: number,
-  selectedStones: [number, number, number, number, number],
+  selectedStones: readonly number[],
   accumulatedLuck = 0,
-  useMayMan = false,
 ): number {
   if (currentLv >= 15) return 0;
-  if (currentLv <= 2) return 100;
-  const weights = [8, 14, 22, 34, 52];
-  let stonePower = 0;
-  for (let i = 0; i < 5; i++) {
-    stonePower += (selectedStones[i] ?? 0) * weights[i];
+  let slotsLeft = MAX_UPGRADE_STONE_SLOTS;
+  let stoneTotal = 0;
+  let installed = 0;
+  // Ưu tiên tính từ đá cấp cao nhất nếu truyền vào nhiều hơn 3 viên
+  for (let i = 4; i >= 0 && slotsLeft > 0; i--) {
+    const cnt = Math.max(0, Math.floor(selectedStones[i] ?? 0));
+    if (cnt <= 0) continue;
+    const take = Math.min(cnt, slotsLeft);
+    stoneTotal += take * getSingleStoneUpgradeRate(currentLv, i + 1);
+    installed += take;
+    slotsLeft -= take;
   }
-  if (stonePower <= 0) return 0;
-  const lvPenalty = Math.max(0, currentLv - 3) * 6;
-  const base = 34 + stonePower - lvPenalty + accumulatedLuck + (useMayMan ? 15 : 0);
-  return Math.max(5, Math.min(100, Math.round(base)));
+  if (installed <= 0) return 0;
+  return Math.max(1, Math.min(100, stoneTotal + Math.max(0, Math.round(accumulatedLuck))));
 }

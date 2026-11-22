@@ -19,6 +19,7 @@ import type {
   BotDifficulty,
   ElementType,
   EvolutionTier,
+  GemMultiplier,
   GemType,
   MatchGroup,
   PetDef,
@@ -40,7 +41,16 @@ export const MATCH_CONSTANTS = {
   MAX_CONSECUTIVE_PASSES: 2,
 } as const;
 
-const EVO_ORDER: readonly EvolutionTier[] = ['BASE', 'S', 'MEGA', 'GALAXY', 'ANCIENT', 'MECH'];
+function isAncientGodPet(petId: string): boolean {
+  return petId === 'pet-ancient-arceus' || petId === 'pet-ancient-rayquaza';
+}
+
+function isAncientImmuneDebuff(target: BattleFighter, kind: ActiveStatus['kind']): boolean {
+  if (!isAncientGodPet(target.petId)) return false;
+  return kind === 'POISON' || kind === 'BURN' || kind === 'STUN';
+}
+
+const EVO_ORDER: readonly EvolutionTier[] = ['BASE', 'S', 'MEGA', 'GALAXY', 'FANTASY', 'ANCIENT', 'MECH'];
 
 export function otherSide(side: Side): Side {
   return side === 'P1' ? 'P2' : 'P1';
@@ -110,7 +120,8 @@ export function createFighter(
     fusionMag;
   const defense = Math.round(pet.defense * scale) + (bonuses?.defenseBonus ?? 0);
   const speed = pet.speed + (bonuses?.speedBonus ?? 0);
-  const maxMana = MATCH_CONSTANTS.BASE_MAX_MANA + (bonuses?.manaBonus ?? 0);
+  // PokiGuard & Pokiwar 2 authentic dynamic Mana pool scaled by Pet Magic stat
+  const maxMana = MATCH_CONSTANTS.BASE_MAX_MANA + Math.round(magic * 2.2) + (bonuses?.manaBonus ?? 0);
   const startMana = Math.min(maxMana, MATCH_CONSTANTS.START_MANA + (bonuses?.secondMercenaryBuff ? 45 : 0));
   const startRage = bonuses?.secondMercenaryBuff ? 25 : 0;
   const equippedSupportCards: SupportCardId[] =
@@ -127,10 +138,11 @@ export function createFighter(
   if (safeGen >= 3) {
     reviveCharges = Math.max(reviveCharges, safeGen >= 5 ? 2 : 1);
   }
+  const ancientInitArmor = isAncientGodPet(pet.id) ? 450 : 0;
   const initShield =
-    pet.passiveSkill?.kind === 'HO_GIAP'
+    (pet.passiveSkill?.kind === 'HO_GIAP'
       ? Math.round(maxHp * Math.min(0.4, pet.passiveSkill.value || 0.25))
-      : 0;
+      : 0) + ancientInitArmor;
 
   return {
     side,
@@ -177,7 +189,30 @@ export function createFighter(
     fusionStrikeUsed: false,
     accumStacks: 0,
     breakthroughLevel: bonuses?.breakthroughLevel ?? 0,
+    gemsCollected: { SWORD: 0, LIGHTNING: 0, FIRE: 0, HEART: 0, YINYANG: 0, COIN: 0 },
+    totalGemsCollected: 0,
+    skillCastCount: 0,
     allyCount,
+  };
+}
+
+/** Computes live progress toward a skill's authentic Pokiwar gem-collection requirement. */
+export function getSkillGemProgress(
+  fighter: BattleFighter,
+  skill: SkillDef,
+): { required: number; current: number; met: boolean; label: string } {
+  const req = skill.gemRequirement;
+  if (!req || req.count <= 0) {
+    return { required: 0, current: 0, met: true, label: '' };
+  }
+  const current = req.gemType
+    ? (fighter.gemsCollected?.[req.gemType] ?? 0)
+    : (fighter.totalGemsCollected ?? 0);
+  return {
+    required: req.count,
+    current,
+    met: req.mode === 'AUTO_TRIGGER' ? true : current >= req.count,
+    label: req.label ?? `${current}/${req.count} Ngọc`,
   };
 }
 
@@ -283,7 +318,16 @@ function applyDamage(
   target: BattleFighter,
   rawDamage: number,
 ): { hpDamage: number; shieldAbsorbed: number } {
-  const dmg = Math.max(1, Math.round(rawDamage));
+  let adjusted = rawDamage;
+  // Authentic Ancient Arceus (A1) Vết Thương Sâu: target takes +20% extra damage!
+  if (target.statuses.some((s) => s.kind === 'DEEP_WOUND')) {
+    adjusted *= 1.2;
+  }
+  // Authentic Ancient Rayquaza (A3 6★): reduces incoming damage by 20%!
+  if (target.petId === 'pet-ancient-rayquaza') {
+    adjusted *= 0.8;
+  }
+  const dmg = Math.max(1, Math.round(adjusted));
   let shieldAbsorbed = 0;
   let remaining = dmg;
 
@@ -339,7 +383,7 @@ function computeGemEffects(
     const reflectRatio =
       (defender.passiveSkill?.kind === 'PHAN_DON' ? defender.passiveSkill.value || 0.14 : 0) +
       (reflectStatus ? reflectStatus.value : 0);
-    if (reflectRatio > 0 && totalDealt > 0 && attacker.hp > 1) {
+    if (reflectRatio > 0 && totalDealt > 0 && attacker.hp > 1 && !isAncientGodPet(attacker.petId)) {
       const reflect = Math.round(totalDealt * reflectRatio);
       attacker.hp = Math.max(1, attacker.hp - reflect);
     }
@@ -600,8 +644,61 @@ function resolveMatchCascade(
   let matches = initialMatches;
   let cascadeIndex = 1;
   let earnedExtraTurn = false;
+  const isAncientAttacker = isAncientGodPet(attacker.petId);
+  const turnGemCounts: Partial<Record<GemType, number>> = {};
 
   while (matches.length > 0) {
+    // Authentic Pokiwar 4.0 Ancient A1/A3 Board-Blast: matching 3/4/5+ gems explodes surrounding gems!
+    if (isAncientAttacker && cascadeIndex === 1) {
+      const usedKeys = new Set<string>();
+      for (const g of matches) {
+        for (const p of g.positions) usedKeys.add(`${p.row},${p.col}`);
+      }
+      const maxLen = Math.max(...matches.map((g) => g.length));
+      const anchor = matches[0].positions[Math.floor(matches[0].positions.length / 2)];
+      const offsets: [number, number][] =
+        maxLen >= 5
+          ? [
+              [-1, -1], [-1, 0], [-1, 1],
+              [0, -1],           [0, 1],
+              [1, -1],  [1, 0],  [1, 1],
+            ]
+          : maxLen >= 4
+            ? [[-1, 0], [1, 0], [0, -1], [0, 1]]
+            : [[0, -1], [0, 1]];
+      const blastByType = new Map<GemType, Pos[]>();
+      for (const [dr, dc] of offsets) {
+        const nr = anchor.row + dr;
+        const nc = anchor.col + dc;
+        if (nr < 0 || nr >= state.rows || nc < 0 || nc >= state.cols) continue;
+        const key = `${nr},${nc}`;
+        if (usedKeys.has(key)) continue;
+        const cell = state.board[nr]?.[nc];
+        if (!cell) continue;
+        usedKeys.add(key);
+        const arr = blastByType.get(cell.type) ?? [];
+        arr.push({ row: nr, col: nc });
+        blastByType.set(cell.type, arr);
+      }
+      if (blastByType.size > 0) {
+        const expanded = [...matches];
+        for (const [gType, posList] of blastByType.entries()) {
+          let eff = 0;
+          for (const p of posList) {
+            eff += state.board[p.row]?.[p.col]?.multiplier ?? 1;
+          }
+          expanded.push({
+            gemType: gType,
+            positions: posList,
+            length: posList.length,
+            effectiveValue: eff,
+            isExtraTurn: false,
+          });
+        }
+        matches = expanded;
+      }
+    }
+
     const comboMultiplier = 1 + (cascadeIndex - 1) * 0.22;
     events.push({
       type: 'MATCH_CLEAR',
@@ -615,6 +712,13 @@ function resolveMatchCascade(
         earnedExtraTurn = true;
         attacker.accumStacks = Math.min(10, (attacker.accumStacks ?? 0) + 1);
       }
+      if (!attacker.gemsCollected) {
+        attacker.gemsCollected = { SWORD: 0, LIGHTNING: 0, FIRE: 0, HEART: 0, YINYANG: 0, COIN: 0 };
+      }
+      attacker.gemsCollected[group.gemType] =
+        (attacker.gemsCollected[group.gemType] ?? 0) + group.effectiveValue;
+      attacker.totalGemsCollected = (attacker.totalGemsCollected ?? 0) + group.effectiveValue;
+      turnGemCounts[group.gemType] = (turnGemCounts[group.gemType] ?? 0) + group.effectiveValue;
       events.push(
         computeGemEffects(
           state,
@@ -626,6 +730,45 @@ function resolveMatchCascade(
           rng,
         ),
       );
+    }
+
+    // Authentic Pokiwar AUTO_TRIGGER Gem-Charge Skill (e.g. Galaxy Shadow Sword "Tụ Lực" at 9 Sword gem points!)
+    if (defender.hp > 0 && attacker.hp > 0) {
+      for (const sk of attacker.skills) {
+        const req = sk.gemRequirement;
+        if (!req || req.mode !== 'AUTO_TRIGGER') continue;
+        const cur = req.gemType
+          ? (attacker.gemsCollected?.[req.gemType] ?? 0)
+          : (attacker.totalGemsCollected ?? 0);
+        if (cur >= req.count) {
+          if (req.gemType && attacker.gemsCollected) {
+            attacker.gemsCollected[req.gemType] = Math.max(0, cur - req.count);
+          } else {
+            attacker.totalGemsCollected = Math.max(0, cur - req.count);
+          }
+          const elemM = getElementMultiplier(attacker.element, defender.element);
+          const mit = 120 / (120 + defender.defense * 0.72);
+          const raw = getEffectiveAttack(attacker, state.fieldElement) * 2.15 * elemM * mit;
+          const res = applyDamage(defender, raw);
+          const totalDmg = res.hpDamage + res.shieldAbsorbed;
+          const lifesteal = Math.min(attacker.maxHp - attacker.hp, Math.round(totalDmg * 0.14));
+          if (lifesteal > 0) attacker.hp += lifesteal;
+          events.push({
+            type: 'SKILL_CAST',
+            side: attacker.side,
+            skillId: sk.id,
+            skillName: sk.name,
+            damage: totalDmg,
+            shieldAbsorbed: res.shieldAbsorbed,
+            heal: lifesteal > 0 ? lifesteal : undefined,
+            elementMultiplier: elemM,
+            specialNote: `⚡ ${req.label ?? 'TỤ LỰC'} TỰ ĐỘNG KÍCH HOẠT!`,
+          });
+          if (defender.hp <= 0) {
+            tryReviveFighter(defender, events);
+          }
+        }
+      }
     }
 
     const refilled = clearAndRefill(state.board, matches, rng, state.nextGemId);
@@ -651,6 +794,99 @@ function resolveMatchCascade(
 
     matches = findMatches(state.board);
     cascadeIndex++;
+  }
+
+  // Authentic Pokiwar 4.0 Ancient A1 (Arceus) & A3 (Rayquaza) Post-Swap Passive Proc!
+  if (isAncientAttacker && defender.hp > 0 && attacker.hp > 0) {
+    const qualifyingTypes = Object.values(turnGemCounts).filter((cnt) => (cnt ?? 0) >= 4).length;
+    if (qualifyingTypes > 0) {
+      const prevStacks = attacker.accumStacks ?? 0;
+      const nextStacks = Math.min(12, prevStacks + qualifyingTypes);
+      const gainedStacks = nextStacks - prevStacks;
+      attacker.accumStacks = nextStacks;
+      if (gainedStacks > 0) {
+        const hpGain = Math.round(attacker.maxHp * 0.025 * gainedStacks);
+        attacker.maxHp += hpGain;
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + hpGain);
+      }
+    }
+
+    const elemM = getElementMultiplier(attacker.element, defender.element);
+    if (attacker.petId === 'pet-ancient-rayquaza') {
+      // A3 Rayquaza: 4★ 5th-hit 150% burst + % Max HP damage + Xuyên Thấu + Tê Liệt (25/50/75/100% + 10% at 6★)
+      attacker.skillCastCount = (attacker.skillCastCount ?? 0) + 1;
+      const isFifthHit = attacker.skillCastCount % 5 === 0;
+      const pctTier =
+        qualifyingTypes >= 6 ? 0.14 : qualifyingTypes >= 4 ? 0.105 : qualifyingTypes >= 2 ? 0.075 : 0.045;
+      const maxHpPct = Math.min(0.16, pctTier + qualifyingTypes * 0.012);
+      const rawAncient = Math.round(defender.maxHp * maxHpPct * (isFifthHit ? 1.5 : 1.0));
+      const dmgRes = applyDamage(defender, rawAncient);
+      const totalDmg = dmgRes.hpDamage + dmgRes.shieldAbsorbed;
+
+      const stunChance = Math.min(
+        1,
+        (qualifyingTypes >= 6 ? 1.0 : qualifyingTypes >= 4 ? 0.75 : qualifyingTypes >= 2 ? 0.5 : 0.25) + 0.1,
+      );
+      const alreadyStunned = defender.statuses.some((s) => s.kind === 'STUN');
+      let appliedStun: ActiveStatus['kind'] | undefined;
+      if (!alreadyStunned && !isAncientImmuneDebuff(defender, 'STUN') && rng.next() < stunChance) {
+        defender.statuses.push({ kind: 'STUN', value: 1, remainingTurns: 1 });
+        appliedStun = 'STUN';
+      }
+
+      events.push({
+        type: 'SKILL_CAST',
+        side: attacker.side,
+        skillId: attacker.skills[0]?.id ?? 'sk-anc-rayquaza',
+        skillName: 'Ancient Rayquaza • Long Nộ',
+        damage: totalDmg,
+        shieldAbsorbed: dmgRes.shieldAbsorbed,
+        elementMultiplier: elemM,
+        appliedStatus: appliedStun,
+        specialNote: `🐉 A3 Nổ Lan (${qualifyingTypes} hệ 4+)${isFifthHit ? ' • ĐÒN THỨ 5 ×150%!' : ''}${appliedStun ? ' • ⚡ TÊ LIỆT!' : ' • Xuyên Thấu!'}`,
+      });
+    } else if (attacker.petId === 'pet-ancient-arceus') {
+      // A1 Arceus: % Max HP damage + Self Heal + Deep Wound (+20% dmg taken, 2t) & 40% Stun when >= 2 types
+      const pctTier =
+        qualifyingTypes >= 6 ? 0.14 : qualifyingTypes >= 4 ? 0.095 : qualifyingTypes >= 2 ? 0.065 : 0.035;
+      const maxHpPct = Math.min(0.16, pctTier + qualifyingTypes * 0.012);
+      const rawAncient = Math.round(defender.maxHp * maxHpPct);
+      const dmgRes = applyDamage(defender, rawAncient);
+      const totalDmg = dmgRes.hpDamage + dmgRes.shieldAbsorbed;
+
+      const healPct =
+        qualifyingTypes >= 6 ? 0.22 : qualifyingTypes >= 4 ? 0.16 : qualifyingTypes >= 2 ? 0.12 : 0.08;
+      const healAmt = Math.min(attacker.maxHp - attacker.hp, Math.round(attacker.maxHp * healPct));
+      if (healAmt > 0) attacker.hp += healAmt;
+
+      let appliedStatus: ActiveStatus['kind'] | undefined;
+      if (qualifyingTypes >= 2) {
+        defender.statuses.push({ kind: 'DEEP_WOUND', value: 2, remainingTurns: 2 });
+        appliedStatus = 'DEEP_WOUND';
+        const alreadyStunned = defender.statuses.some((s) => s.kind === 'STUN');
+        if (!alreadyStunned && !isAncientImmuneDebuff(defender, 'STUN') && rng.next() < 0.4) {
+          defender.statuses.push({ kind: 'STUN', value: 1, remainingTurns: 1 });
+          appliedStatus = 'STUN';
+        }
+      }
+
+      events.push({
+        type: 'SKILL_CAST',
+        side: attacker.side,
+        skillId: attacker.skills[0]?.id ?? 'sk-anc-arceus',
+        skillName: 'Ancient Arceus • Thiên Phán',
+        damage: totalDmg,
+        shieldAbsorbed: dmgRes.shieldAbsorbed,
+        heal: healAmt > 0 ? healAmt : undefined,
+        elementMultiplier: elemM,
+        appliedStatus,
+        specialNote: `✨ A1 Thiên Phán (${qualifyingTypes} hệ 4+)${qualifyingTypes >= 2 ? ' • Vết Thương Sâu (+20% ST)!' : ''}`,
+      });
+    }
+
+    if (defender.hp <= 0) {
+      tryReviveFighter(defender, events);
+    }
   }
 
   return earnedExtraTurn;
@@ -807,7 +1043,7 @@ export const SUPPORT_CARDS: Record<
     name: 'Khiên Hộ Thể',
     label: '+320 Giáp',
     description: 'Tạo ngay lớp Giáp Hộ Thể +320 Giáp chặn sát thương.',
-    image: '/assets/pokiguard/cards/card4.png',
+    image: '/assets/pokiguard/cards/card9.png',
     amount: 320,
   },
   ATK_BUFF: {
@@ -1024,12 +1260,12 @@ function spawnRandomMultipliers(
   state: BattleState,
   rng: SeededRandom,
   count: number,
-  maxMult: 2 | 3 | 4 = 3,
+  maxMult: GemMultiplier = 7,
 ): void {
   const candidates: Pos[] = [];
   for (let r = 0; r < state.board.length; r++) {
     for (let c = 0; c < (state.board[r]?.length ?? 0); c++) {
-      if ((state.board[r][c].multiplier ?? 1) === 1) {
+      if ((state.board[r][c].multiplier ?? 1) < maxMult) {
         candidates.push({ row: r, col: c });
       }
     }
@@ -1038,9 +1274,10 @@ function spawnRandomMultipliers(
   for (let i = 0; i < targetCount; i++) {
     const idx = rng.nextInt(candidates.length);
     const pos = candidates.splice(idx, 1)[0];
+    const cur = state.board[pos.row][pos.col].multiplier ?? 1;
     const roll = rng.next();
-    state.board[pos.row][pos.col].multiplier =
-      maxMult === 4 && roll < 0.2 ? 4 : maxMult >= 3 && roll < 0.4 ? 3 : 2;
+    const bump = roll < 0.25 ? 2 : 1;
+    state.board[pos.row][pos.col].multiplier = Math.min(maxMult, cur + bump) as GemMultiplier;
   }
 }
 
@@ -1129,13 +1366,13 @@ function applySkillBoardEffect(
   if (!effect) return undefined;
 
   if (effect === 'SPAWN_MULTIPLIERS') {
-    spawnRandomMultipliers(state, rng, 11, 3);
+    spawnRandomMultipliers(state, rng, 12, 7);
     events.push({
       type: 'BOARD_REFILL',
       drops: [],
       boardAfter: cloneBoard(state.board),
     });
-    return '✨ Hóa ngọc x2/x3 trên toàn bàn đấu!';
+    return '✨ Cường hóa ngọc x2–x7 trên toàn bàn đấu!';
   }
 
   if (effect === 'FATE_CARD') {
@@ -1170,14 +1407,16 @@ function applySkillBoardEffect(
     const positions: Pos[] = [];
     for (let r = r0; r < Math.min(rows, r0 + 5); r++) {
       for (let c = c0; c < Math.min(cols, c0 + 5); c++) {
+        const cur = state.board[r][c].multiplier ?? 1;
         const roll = rng.next();
-        state.board[r][c].multiplier = roll < 0.2 ? 4 : roll < 0.55 ? 3 : 2;
+        const add = roll < 0.2 ? 3 : roll < 0.55 ? 2 : 1;
+        state.board[r][c].multiplier = Math.min(7, cur + add) as GemMultiplier;
         positions.push({ row: r, col: c });
       }
     }
     const pts = clearPositionsAndCascade(positions, state, attacker, defender, rng, events, 2.0, true);
     if (skill.spawnMultipliersAfter) {
-      spawnRandomMultipliers(state, rng, 6, 3);
+      spawnRandomMultipliers(state, rng, 6, 7);
       events.push({ type: 'BOARD_REFILL', drops: [], boardAfter: cloneBoard(state.board) });
     }
     return `🔥 KẾT ẤN BỘC HỎA (Ăn ${pts} điểm ngọc • x2 Sát thương)!`;
@@ -1199,9 +1438,9 @@ function applySkillBoardEffect(
       for (let r = 0; r < rows; r++) positions.push({ row: r, col: ctr.col });
     }
     const pts = clearPositionsAndCascade(positions, state, attacker, defender, rng, events, 1.55, true);
-    spawnRandomMultipliers(state, rng, 8, 3);
+    spawnRandomMultipliers(state, rng, 8, 6);
     events.push({ type: 'BOARD_REFILL', drops: [], boardAfter: cloneBoard(state.board) });
-    return `✚ NỔ 2 CHỮ THẬP (${pts} điểm ngọc + Sinh ngọc x2/x3)!`;
+    return `✚ NỔ 2 CHỮ THẬP (${pts} điểm ngọc + Sinh ngọc x2–x6)!`;
   }
 
   if (effect === 'BOMB_3X3') {
@@ -1226,9 +1465,9 @@ function applySkillBoardEffect(
       }
     }
     const pts = clearPositionsAndCascade(positions, state, attacker, defender, rng, events, 1.6, true);
-    spawnRandomMultipliers(state, rng, 8, 2);
+    spawnRandomMultipliers(state, rng, 8, 5);
     events.push({ type: 'BOARD_REFILL', drops: [], boardAfter: cloneBoard(state.board) });
-    return `💣 KÍCH NỔ 3 BOM 3×3 (${pts} điểm ngọc + Băng Kiếm x2)!`;
+    return `💣 KÍCH NỔ 3 BOM 3×3 (${pts} điểm ngọc + Băng Kiếm x2–x5)!`;
   }
 
   if (effect === 'CONSUME_GEMS') {
@@ -1251,7 +1490,7 @@ function applySkillBoardEffect(
       applyDamage(defender, bonusRaw);
     }
     if (skill.spawnMultipliersAfter) {
-      spawnRandomMultipliers(state, rng, 6, 2);
+      spawnRandomMultipliers(state, rng, 6, 5);
       events.push({ type: 'BOARD_REFILL', drops: [], boardAfter: cloneBoard(state.board) });
     }
     return `💎 ĂN ${positions.length} VIÊN NGỌC CHỦ LỰC (${pts} điểm)!`;
@@ -1328,19 +1567,56 @@ export function executeSkill(
   if ((attacker.cooldowns[skill.id] ?? 0) > 0) {
     return { ok: false, error: 'Kỹ năng đang hồi chiêu.', state, events: [] };
   }
+  const gemProg = getSkillGemProgress(attacker, skill);
+  if (skill.gemRequirement?.mode === 'UNLOCK_CARD' && !gemProg.met) {
+    return {
+      ok: false,
+      error: `Chưa đủ điều kiện ngọc (${gemProg.current}/${gemProg.required} ${gemProg.label})!`,
+      state,
+      events: [],
+    };
+  }
 
   attacker.rage -= skill.rageCost;
   attacker.mana -= manaReq;
   attacker.cooldowns[skill.id] = skill.cooldown + 1;
   attacker.consecutivePasses = 0;
+  attacker.skillCastCount = (attacker.skillCastCount ?? 0) + 1;
 
-  const qteMult = skill.needPerfection
-    ? qteGrade === 'PERFECT'
-      ? 1.5
-      : qteGrade === 'GOOD'
-        ? 1.15
-        : 0.8
-    : 1.0;
+  // Consume UNLOCK_CARD gem charge on cast
+  if (skill.gemRequirement?.mode === 'UNLOCK_CARD') {
+    const req = skill.gemRequirement;
+    if (req.gemType && attacker.gemsCollected) {
+      attacker.gemsCollected[req.gemType] = Math.max(0, (attacker.gemsCollected[req.gemType] ?? 0) - req.count);
+    } else {
+      attacker.totalGemsCollected = Math.max(0, (attacker.totalGemsCollected ?? 0) - req.count);
+    }
+  }
+
+  // Authentic Pokiwar signature cast-stacking passives:
+  // 1. Galaxy Risky (G1): Every 4th skill cast deals 2x damage!
+  // 2. Galaxy Chess Master (G6): Nước Cờ stacking (+18% skill dmg per cast, up to x5 = +90%)!
+  // 3. Mega Twin Flame / Twin Frost: Thăng Hoa stacking (+14% skill dmg per cast, cycles 1..5)!
+  const riskyBonusMult = attacker.petId === 'pet-galaxy-risky' && attacker.skillCastCount % 4 === 0 ? 2.0 : 1.0;
+  const chessStacks = attacker.petId === 'pet-3090' ? Math.min(5, attacker.skillCastCount) : 0;
+  const chessMult = chessStacks > 0 ? 1 + (chessStacks - 1) * 0.18 : 1.0;
+  const twinStacks =
+    attacker.petId === 'pet-mega-twinflame' || attacker.petId === 'pet-mega-twinfrost'
+      ? ((attacker.skillCastCount - 1) % 5) + 1
+      : 0;
+  const twinMult = twinStacks > 0 ? 1 + (twinStacks - 1) * 0.14 : 1.0;
+
+  const qteMult =
+    (skill.needPerfection
+      ? qteGrade === 'PERFECT'
+        ? 1.5
+        : qteGrade === 'GOOD'
+          ? 1.15
+          : 0.8
+      : 1.0) *
+    riskyBonusMult *
+    chessMult *
+    twinMult;
 
   const events: BattleEvent[] = [];
   let damage: number | undefined;
@@ -1427,18 +1703,40 @@ export function executeSkill(
         skill.statusEffect.kind === 'ATK_UP' || skill.statusEffect.kind === 'SHIELD_REGEN'
           ? attacker
           : defender;
-      targetFighter.statuses.push({
-        kind: skill.statusEffect.kind,
-        value: skill.statusEffect.value,
-        remainingTurns: skill.statusEffect.durationTurns,
-      });
-      appliedStatus = skill.statusEffect.kind;
+      if (!isAncientImmuneDebuff(targetFighter, skill.statusEffect.kind)) {
+        targetFighter.statuses.push({
+          kind: skill.statusEffect.kind,
+          value: skill.statusEffect.value,
+          remainingTurns: skill.statusEffect.durationTurns,
+        });
+        appliedStatus = skill.statusEffect.kind;
+      }
     }
+  }
+  // Authentic Ancient Arceus (A1) Special Card bonus: 40% chance to also Stun target alongside Deep Wound
+  if (
+    attacker.petId === 'pet-ancient-arceus' &&
+    !defender.statuses.some((s) => s.kind === 'STUN') &&
+    !isAncientImmuneDebuff(defender, 'STUN') &&
+    rng.next() < 0.4
+  ) {
+    defender.statuses.push({ kind: 'STUN', value: 1, remainingTurns: 1 });
   }
 
   let specialNote: string | undefined;
   if (skill.boardEffect && defender.hp > 0 && attacker.hp > 0) {
     specialNote = applySkillBoardEffect(skill, state, attacker, defender, rng, events, selectedRows);
+  }
+  const stackSuffix =
+    chessStacks > 0
+      ? `♟️ Nước Cờ ×${chessStacks} (+${(chessStacks - 1) * 18}% ST)`
+      : twinStacks > 0
+        ? `✨ Thăng Hoa ${twinStacks}/5 (+${(twinStacks - 1) * 14}% ST)`
+        : riskyBonusMult > 1
+          ? '🃏 Tứ Thần Bài ×2 Sát Thương!'
+          : undefined;
+  if (stackSuffix) {
+    specialNote = specialNote ? `${specialNote} • ${stackSuffix}` : stackSuffix;
   }
   state.rngState = rng.getState();
 
@@ -1577,7 +1875,8 @@ export function chooseBotDecision(state: BattleState, difficulty: BotDifficulty)
       (s) =>
         bot.rage >= s.rageCost &&
         bot.mana >= (s.manaCost ?? 0) &&
-        (bot.cooldowns[s.id] ?? 0) === 0,
+        (bot.cooldowns[s.id] ?? 0) === 0 &&
+        getSkillGemProgress(bot, s).met,
     );
     if (readySkills.length > 0) {
       const healSkill = readySkills.find(

@@ -265,7 +265,6 @@ export function LoginScreen({ serverOnline: _serverOnline, onAuthenticated }: Lo
         gold: 1500,
         stones: 25,
         stoneBag: [8, 4, 2, 1, 0],
-        charms: { binhAn: 2, mayMan: 2 },
         wins: 0,
         worldBossBestDamage: 0,
         wheelSpunCount: 0,

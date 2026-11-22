@@ -34,7 +34,7 @@ export interface MysteryShopOffer {
   id: string;
   name: string;
   icon: string;
-  kind: 'SHARD' | 'STONE_LV5' | 'GEN_CORE' | 'CHARM';
+  kind: 'SHARD' | 'STONE_LV4' | 'STONE_LV5' | 'GEN_CORE';
   petId?: string;
   amount: number;
   baseGold: number;
@@ -108,9 +108,9 @@ export function PokiExtrasModal({
       { id: `ms-${mysterySeed}-1`, name: `+15 Mảnh ${p1.name}`, icon: getPetSpritePath(p1), kind: 'SHARD', petId: p1.id, amount: 15, baseGold: 2600, discountPct: 50 },
       { id: `ms-${mysterySeed}-2`, name: `+15 Mảnh ${p2.name}`, icon: getPetSpritePath(p2), kind: 'SHARD', petId: p2.id, amount: 15, baseGold: 2800, discountPct: 40 },
       { id: `ms-${mysterySeed}-3`, name: `+12 Mảnh ${p3.name}`, icon: getPetSpritePath(p3), kind: 'SHARD', petId: p3.id, amount: 12, baseGold: 2200, discountPct: 60 },
-      { id: `ms-${mysterySeed}-4`, name: '+3 Bùa Bình An & May Mắn', icon: '/assets/pokiguard/sprites/charm_may_man.png', kind: 'CHARM', amount: 3, baseGold: 1400, discountPct: 45 },
+      { id: `ms-${mysterySeed}-4`, name: '+4 Đá Cấp 4', icon: '/assets/pokiguard/sprites/stone_m_4.png', kind: 'STONE_LV4', amount: 4, baseGold: 1400, discountPct: 45 },
       { id: `ms-${mysterySeed}-5`, name: '+4 Tinh Thể Gen T2', icon: '/assets/pokiguard/sprites/crystal.png', kind: 'GEN_CORE', amount: 4, baseGold: 2400, discountPct: 50 },
-      { id: `ms-${mysterySeed}-6`, name: '+3 Đá Cấp 5 & +2 Bùa', icon: '/assets/pokiguard/sprites/stone_m_5.png', kind: 'STONE_LV5', amount: 3, baseGold: 2600, discountPct: 55 },
+      { id: `ms-${mysterySeed}-6`, name: '+3 Đá Cấp 5', icon: '/assets/pokiguard/sprites/stone_m_5.png', kind: 'STONE_LV5', amount: 3, baseGold: 2400, discountPct: 55 },
     ];
     return raw.map((o) => ({
       ...o,

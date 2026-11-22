@@ -35,6 +35,7 @@ export interface SpineStageCanvasProps {
   animCommand?: AnimCommand | null;
   actionCue?: StageActionCue | null;
   scaleMultiplier?: number;
+  speedMultiplier?: number;
 }
 
 const ELEMENT_COLORS: Record<ElementType, number> = {
@@ -134,6 +135,51 @@ function normalizeSpriteId(raw?: string): string {
   return raw.replace(/^pet-/, '');
 }
 
+type PetWeaponStyle =
+  | 'BOW_PHOENIX'
+  | 'GREATSWORD_SLASH'
+  | 'LANCE_THRUST'
+  | 'JESTER_DAGGERS'
+  | 'FATE_CARDS'
+  | 'CHESS_DROP'
+  | 'DEMON_FAN_KATANA'
+  | 'FOX_CLAW'
+  | 'FLAME_FIST'
+  | 'ICE_SPIKES'
+  | 'PHOENIX_FLAME'
+  | 'ANGEL_HALO'
+  | 'VOID_PORTAL'
+  | 'ANCIENT_DRAGON_STORM'
+  | 'ANCIENT_JUDGMENT'
+  | 'ELEMENTAL';
+
+function resolvePetWeaponStyle(spriteId?: string): PetWeaponStyle {
+  if (!spriteId) return 'ELEMENTAL';
+  const id = spriteId.toLowerCase();
+  if (id.includes('ancient_rayquaza') || id.includes('rayquaza')) return 'ANCIENT_DRAGON_STORM';
+  if (id.includes('ancient_arceus') || id.includes('arceus')) return 'ANCIENT_JUDGMENT';
+  if (id.includes('icarus')) return 'BOW_PHOENIX';
+  if (id.includes('zidarose') || id.includes('issylt') || id.includes('shadow_sword') || id.includes('kassadin')) {
+    return 'GREATSWORD_SLASH';
+  }
+  if (id.includes('elpidios') || id.includes('dragon_knight') || id.includes('orithyia')) {
+    return 'LANCE_THRUST';
+  }
+  if (id.includes('joker')) return 'JESTER_DAGGERS';
+  if (id.includes('risky')) return 'FATE_CARDS';
+  if (id.includes('chess_master')) return 'CHESS_DROP';
+  if (id.includes('hyon')) return 'DEMON_FAN_KATANA';
+  if (id.includes('ahrina')) return 'FOX_CLAW';
+  if (id.includes('fireware') || id.includes('zero') || id.includes('glank')) return 'FLAME_FIST';
+  if (id.includes('prysma') || id.includes('twinfrost') || id.includes('aquar')) return 'ICE_SPIKES';
+  if (id.includes('twinflame') || id.includes('humex')) return 'PHOENIX_FLAME';
+  if (id.includes('priest') || id.includes('fairy') || id.includes('galaxy_god') || id.includes('blume')) {
+    return 'ANGEL_HALO';
+  }
+  if (id.includes('spetra') || id.includes('axcel')) return 'VOID_PORTAL';
+  return 'ELEMENTAL';
+}
+
 interface Particle {
   gfx: Graphics;
   vx: number;
@@ -203,6 +249,7 @@ export function SpineStageCanvas({
   animCommand = null,
   actionCue = null,
   scaleMultiplier = 1,
+  speedMultiplier = 1,
 }: SpineStageCanvasProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const rigRef = useRef<StageRig | null>(null);
@@ -267,9 +314,9 @@ export function SpineStageCanvas({
     const root = new Container();
     app.stage.addChild(root);
 
-    const myBaseX = resolvedMode === 'SINGLE' ? width * 0.5 : width * 0.165;
-    const enemyBaseX = width * 0.835;
-    const baseY = resolvedMode === 'SINGLE' ? height * 0.72 : height * 0.62;
+    const myBaseX = resolvedMode === 'SINGLE' ? width * 0.5 : width * 0.175;
+    const enemyBaseX = width * 0.825;
+    const baseY = resolvedMode === 'SINGLE' ? height * 0.72 : height * 0.67;
 
     const myPedestal = new Sprite();
     myPedestal.anchor.set(0.5);
@@ -492,17 +539,36 @@ export function SpineStageCanvas({
         if (anim.cmd.type === 'ATTACK' || anim.cmd.type === 'SKILL') {
           const isSkillCast = anim.cmd.type === 'SKILL';
           const elem: ElementType = anim.cmd.element ?? (isPlayerActor ? cur.myElement : cur.enemyElement);
-          // 3 diverse attack motion styles (0 = melee dash, 1 = aerial barrage, 2 = arcane sky-strike) + 3 = Ultimate SKILL
+          const actorSpriteId = isPlayerActor ? cur.myId : cur.enemyId;
+          const weaponStyle = resolvePetWeaponStyle(actorSpriteId);
+          // Diverse body motion tailored to the pet's weapon (ranged archers/mages lean back & shoot; swordsmen/claw/fist dash across!)
+          const isRangedStyle =
+            weaponStyle === 'BOW_PHOENIX' ||
+            weaponStyle === 'JESTER_DAGGERS' ||
+            weaponStyle === 'FATE_CARDS' ||
+            weaponStyle === 'CHESS_DROP' ||
+            weaponStyle === 'ICE_SPIKES' ||
+            weaponStyle === 'ANGEL_HALO' ||
+            weaponStyle === 'VOID_PORTAL';
+          const isHeavyMelee =
+            weaponStyle === 'GREATSWORD_SLASH' ||
+            weaponStyle === 'FLAME_FIST' ||
+            weaponStyle === 'FOX_CLAW' ||
+            weaponStyle === 'DEMON_FAN_KATANA';
           const attackStyle = isSkillCast ? 3 : anim.cmd.id % 3;
           const lungeDist =
             cur.resolvedMode === 'DUEL'
-              ? attackStyle === 0
-                ? 215
-                : attackStyle === 1
-                  ? 135
-                  : attackStyle === 2
-                    ? 48
-                    : 125
+              ? isRangedStyle
+                ? 36
+                : isHeavyMelee
+                  ? 250
+                  : weaponStyle === 'LANCE_THRUST' || weaponStyle === 'PHOENIX_FLAME'
+                    ? 175
+                    : attackStyle === 0
+                      ? 215
+                      : attackStyle === 1
+                        ? 135
+                        : 52
               : 34;
           let move = 0;
           let jumpY = 0;
@@ -512,32 +578,39 @@ export function SpineStageCanvas({
 
           if (p < 0.24) {
             const wp = p / 0.24;
-            move = -24 * wp;
-            jumpY = attackStyle === 1 || isSkillCast ? -42 * wp : attackStyle === 2 ? -24 * wp : 6 * wp;
-            poseRot = -0.16 * dir * wp;
-            poseSX = isSkillCast ? 1 + 0.1 * wp : 1 + 0.09 * wp;
-            poseSY = isSkillCast ? 1 + 0.12 * wp : 1 - 0.11 * wp;
-          } else if (p < 0.5) {
-            const lp = (p - 0.24) / 0.26;
-            move = -24 + (lungeDist + 24) * lp;
+            move = isRangedStyle ? -32 * wp : -26 * wp;
             jumpY =
-              attackStyle === 1
-                ? -42 - Math.sin(lp * Math.PI) * 28
-                : attackStyle === 2 || isSkillCast
-                  ? -34
-                  : -Math.sin(lp * Math.PI) * 32;
-            poseRot = 0.24 * dir * Math.sin(lp * Math.PI);
-            poseSX = 1.16;
-            poseSY = 0.91;
-            // Speed dash streaks behind attacker
-            rig.projGfx.lineStyle(3.5, cmdColor, 0.62);
-            for (let s = 0; s < 4; s++) {
-              const sy = rig.baseY - 72 + s * 22;
-              rig.projGfx.moveTo(actorX + move * dir - dir * 28, sy);
-              rig.projGfx.lineTo(actorX + move * dir - dir * 92, sy);
+              weaponStyle === 'ANGEL_HALO' || weaponStyle === 'PHOENIX_FLAME' || isSkillCast
+                ? -44 * wp
+                : weaponStyle === 'BOW_PHOENIX'
+                  ? -16 * wp
+                  : 8 * wp;
+            poseRot = (isRangedStyle ? -0.2 : -0.17) * dir * wp;
+            poseSX = isRangedStyle ? 1 - 0.08 * wp : 1 + 0.1 * wp;
+            poseSY = isRangedStyle ? 1 + 0.1 * wp : 1 - 0.12 * wp;
+          } else if (p < 0.52) {
+            const lp = (p - 0.24) / 0.28;
+            move = -26 + (lungeDist + 26) * lp;
+            jumpY =
+              weaponStyle === 'FOX_CLAW' || weaponStyle === 'GREATSWORD_SLASH'
+                ? -Math.sin(lp * Math.PI) * 58
+                : weaponStyle === 'BOW_PHOENIX' || isRangedStyle
+                  ? -18 * (1 - lp)
+                  : -Math.sin(lp * Math.PI) * 34;
+            poseRot = (isHeavyMelee ? 0.3 : 0.18) * dir * Math.sin(lp * Math.PI);
+            poseSX = isHeavyMelee ? 1.2 : 1.12;
+            poseSY = isHeavyMelee ? 0.88 : 0.94;
+            // Afterimage speed streaks behind melee dashing pets
+            if (!isRangedStyle) {
+              rig.projGfx.lineStyle(4, cmdColor, 0.68);
+              for (let s = 0; s < 5; s++) {
+                const sy = rig.baseY - 82 + s * 22;
+                rig.projGfx.moveTo(actorX + move * dir - dir * 24, sy);
+                rig.projGfx.lineTo(actorX + move * dir - dir * 106, sy);
+              }
             }
           } else {
-            const back = (p - 0.5) / 0.5;
+            const back = (p - 0.52) / 0.48;
             move = lungeDist * (1 - back);
             jumpY = -Math.sin((1 - back) * Math.PI) * 18;
             poseRot = 0.08 * dir * (1 - back);
@@ -557,27 +630,359 @@ export function SpineStageCanvas({
             enemyExtraScaleY = poseSY;
           }
 
-          // Dual spinning arcane cast circles under caster during SKILL or Style 2 sky-strike
-          if ((isSkillCast || attackStyle === 2) && p < 0.68) {
+          // Dual spinning arcane cast circles under caster during SKILL or ranged casts
+          if ((isSkillCast || isRangedStyle) && p < 0.68) {
             const ringAlpha = Math.sin(Math.min(1, p / 0.68) * Math.PI);
             const cx = actorX + move * dir;
             rig.projGfx.lineStyle(4, 0xfef08a, ringAlpha * 0.95);
-            rig.projGfx.drawEllipse(cx, rig.baseY + 42, 96, 28);
+            rig.projGfx.drawEllipse(cx, rig.baseY + 42, 98, 28);
             rig.projGfx.lineStyle(3, cmdColor, ringAlpha * 0.85);
             rig.projGfx.drawEllipse(cx, rig.baseY + 42, 72, 20);
           }
 
-          // ELEMENT-SPECIFIC DIVERSE ATTACK & SKILL VFX!
+          // ==================== AUTHENTIC PER-PET SIGNATURE WEAPON & MOTION VFX ====================
           const ix = cur.resolvedMode === 'DUEL' ? targetX : actorX;
           const iy = rig.baseY - 48;
+          const curActorX = actorX + move * dir;
+          const curActorY = rig.baseY - 52 + jumpY;
 
-          if (cur.resolvedMode === 'DUEL' && p < 0.56) {
-            const projT = Math.min(1, p / 0.5);
+          if (cur.resolvedMode === 'DUEL' && p < 0.66) {
+            const projT = Math.min(1, Math.max(0, (p - 0.1) / 0.44));
             const projX = actorX + (targetX - actorX) * projT;
-            const projY = rig.baseY - 62 - Math.sin(projT * Math.PI) * (attackStyle === 1 ? 62 : 28);
+            const projY = rig.baseY - 62 - Math.sin(projT * Math.PI) * 34;
             const orbRadius = isSkillCast ? 26 : 16;
 
-            if (elem === 'KIM') {
+            if (weaponStyle === 'BOW_PHOENIX') {
+              // 🏹 MEGA ICARUS: Glowing golden-flame Phoenix Bow draw + volley of 4 rainbow/flame arrows!
+              const bowX = curActorX + dir * 48;
+              const bowY = curActorY - 6;
+              if (p < 0.45) {
+                const bowAlpha = Math.sin(Math.min(1, p / 0.45) * Math.PI);
+                rig.projGfx.lineStyle(6, 0xfacc15, bowAlpha);
+                rig.projGfx.arc(bowX, bowY, 54, dir > 0 ? -1.15 : Math.PI - 1.15, dir > 0 ? 1.15 : Math.PI + 1.15);
+                rig.projGfx.lineStyle(2.5, 0xffffff, bowAlpha * 0.9);
+                const pullBack = p < 0.25 ? (p / 0.25) * 28 : 28 * (1 - (p - 0.25) / 0.2);
+                const topTipX = bowX + dir * 22;
+                const topTipY = bowY - 48;
+                const botTipY = bowY + 48;
+                rig.projGfx.moveTo(topTipX, topTipY);
+                rig.projGfx.lineTo(bowX - dir * pullBack, bowY);
+                rig.projGfx.lineTo(topTipX, botTipY);
+              }
+              if (p >= 0.16 && p < 0.62) {
+                const arrowCount = isSkillCast ? 5 : 3;
+                const arrowColors = [0xfef08a, 0xf97316, 0x38bdf8, 0xf472b6, 0x4ade80];
+                for (let a = 0; a < arrowCount; a++) {
+                  const at = Math.min(1, Math.max(0, (p - 0.16 - a * 0.035) / 0.34));
+                  if (at <= 0 || at >= 1) continue;
+                  const spreadY = (a - (arrowCount - 1) / 2) * 24;
+                  const ax = bowX + (ix - bowX) * at;
+                  const ay = bowY + (iy - bowY) * at - Math.sin(at * Math.PI) * (46 + Math.abs(spreadY) * 0.6) + spreadY * (1 - at);
+                  const col = arrowColors[a % arrowColors.length];
+                  rig.projGfx.lineStyle(5, col, 0.95);
+                  rig.projGfx.moveTo(ax - dir * 44, ay + 5);
+                  rig.projGfx.lineTo(ax + dir * 16, ay);
+                  rig.projGfx.lineStyle(2.2, 0xffffff, 0.95);
+                  rig.projGfx.moveTo(ax - dir * 36, ay + 4);
+                  rig.projGfx.lineTo(ax + dir * 18, ay);
+                  // Arrowhead
+                  rig.projGfx.beginFill(0xffffff, 0.95);
+                  rig.projGfx.drawPolygon([ax + dir * 24, ay, ax + dir * 8, ay - 7, ax + dir * 8, ay + 7]);
+                  rig.projGfx.endFill();
+                }
+              }
+            } else if (weaponStyle === 'GREATSWORD_SLASH') {
+              // ⚔️ MEGA ZIDAROSE / SHADOW SWORD / ISSYLT / KASSADIN: Blazing Greatsword sweeping arc + flame/void sword pillars!
+              const isShadow = actorSpriteId?.includes('shadow_sword');
+              const isVoid = actorSpriteId?.includes('kassadin');
+              const isIceSword = actorSpriteId?.includes('issylt');
+              const bladeOuter = isShadow ? 0xdc2626 : isVoid ? 0x22d3ee : isIceSword ? 0x38bdf8 : 0xf97316;
+              const bladeCore = isShadow ? 0x18181b : isVoid ? 0xe0f2fe : 0xfef08a;
+              if (p >= 0.24 && p < 0.64) {
+                const sp = (p - 0.24) / 0.4;
+                const arcAlpha = Math.sin(sp * Math.PI);
+                const slashX = curActorX + dir * 56;
+                const slashR = isSkillCast ? 148 : 112;
+                // Giant sweeping sword crescent wave
+                rig.projGfx.lineStyle(18 * arcAlpha + 3, bladeOuter, arcAlpha * 0.92);
+                rig.projGfx.arc(slashX, iy, slashR, dir > 0 ? -1.35 : Math.PI - 1.35, dir > 0 ? 1.15 : Math.PI + 1.15);
+                rig.projGfx.lineStyle(7 * arcAlpha + 1, bladeCore, arcAlpha);
+                rig.projGfx.arc(slashX + dir * 6, iy, slashR - 10, dir > 0 ? -1.2 : Math.PI - 1.2, dir > 0 ? 1.0 : Math.PI + 1.0);
+                // Erupting ground sword pillars around enemy (signature Shadow Sword / Zidarose finish!)
+                if (p >= 0.34) {
+                  for (let k = -1; k <= 1; k++) {
+                    const px = ix + k * 46;
+                    const ph = (isSkillCast ? 230 : 155) * arcAlpha;
+                    rig.projGfx.beginFill(bladeOuter, arcAlpha * 0.55);
+                    rig.projGfx.drawPolygon([px, rig.baseY + 40 - ph, px - 18, rig.baseY + 40, px + 18, rig.baseY + 40]);
+                    rig.projGfx.endFill();
+                    rig.projGfx.beginFill(0xffffff, arcAlpha * 0.72);
+                    rig.projGfx.drawPolygon([px, rig.baseY + 40 - ph * 0.85, px - 6, rig.baseY + 40, px + 6, rig.baseY + 40]);
+                    rig.projGfx.endFill();
+                  }
+                }
+              }
+            } else if (weaponStyle === 'LANCE_THRUST') {
+              // 🔱 MEGA ELPIDIOS / DRAGON KNIGHT / PRIMAL ORITHYIA: Piercing Lance Beam / Golden Time Orb / Moon-Trident Frost!
+              const isDragonKnight = actorSpriteId?.includes('dragon_knight');
+              const isOrithyia = actorSpriteId?.includes('orithyia');
+              const beamCol = isDragonKnight ? 0xfacc15 : isOrithyia ? 0x67e8f9 : 0x34d399;
+              if (isDragonKnight) {
+                // Hurls giant spinning Golden Time-Clock Energy Orb!
+                const r = isSkillCast ? 42 : 28;
+                rig.projGfx.beginFill(0xf59e0b, 0.38);
+                rig.projGfx.drawCircle(projX, projY, r + 14);
+                rig.projGfx.endFill();
+                rig.projGfx.lineStyle(4, 0xfef08a, 0.98);
+                rig.projGfx.beginFill(0xfacc15, 0.82);
+                rig.projGfx.drawCircle(projX, projY, r);
+                rig.projGfx.endFill();
+                // Spinning clock hands inside orb
+                rig.projGfx.lineStyle(3.5, 0x1e3a8a, 0.95);
+                rig.projGfx.moveTo(projX, projY);
+                rig.projGfx.lineTo(projX + Math.cos(elapsedTotal * 14) * r * 0.75, projY + Math.sin(elapsedTotal * 14) * r * 0.75);
+                rig.projGfx.moveTo(projX, projY);
+                rig.projGfx.lineTo(projX + Math.cos(-elapsedTotal * 7) * r * 0.5, projY + Math.sin(-elapsedTotal * 7) * r * 0.5);
+              } else {
+                // Piercing Lance Energy Beam from caster to target
+                const beamAlpha = Math.sin(Math.min(1, projT) * Math.PI);
+                rig.projGfx.lineStyle(isSkillCast ? 24 : 15, beamCol, beamAlpha * 0.45);
+                rig.projGfx.moveTo(curActorX + dir * 34, iy);
+                rig.projGfx.lineTo(curActorX + (ix - curActorX) * projT, iy);
+                rig.projGfx.lineStyle(isSkillCast ? 9 : 6, 0xffffff, beamAlpha * 0.95);
+                rig.projGfx.moveTo(curActorX + dir * 34, iy);
+                rig.projGfx.lineTo(curActorX + (ix - curActorX) * projT, iy);
+                // Spear tip cone
+                const tipX = curActorX + (ix - curActorX) * projT;
+                rig.projGfx.beginFill(beamCol, 0.95);
+                rig.projGfx.drawPolygon([tipX + dir * 32, iy, tipX - dir * 12, iy - 16, tipX - dir * 12, iy + 16]);
+                rig.projGfx.endFill();
+              }
+            } else if (weaponStyle === 'JESTER_DAGGERS') {
+              // 🃏 FANTASY JOKER: Dark-violet phantom burst + fan of 5 spinning curved daggers & cards!
+              if (isSkillCast && p > 0.12 && p < 0.58) {
+                rig.projGfx.beginFill(0x3b0764, 0.24);
+                rig.projGfx.drawRect(0, 0, cur.width, cur.height);
+                rig.projGfx.endFill();
+              }
+              const count = isSkillCast ? 6 : 4;
+              for (let d = 0; d < count; d++) {
+                const dt2 = Math.min(1, Math.max(0, (p - 0.12 - d * 0.03) / 0.36));
+                if (dt2 <= 0 || dt2 >= 1) continue;
+                const spread = (d - (count - 1) / 2) * 32;
+                const dx = curActorX + (ix - curActorX) * dt2;
+                const dy = iy + spread * (1 - dt2) - Math.sin(dt2 * Math.PI) * 38;
+                const ang = elapsedTotal * 22 + d * 1.3;
+                rig.projGfx.lineStyle(3, d % 2 === 0 ? 0xe879f9 : 0xf43f5e, 0.95);
+                rig.projGfx.beginFill(0xf8fafc, 0.95);
+                rig.projGfx.drawPolygon([
+                  dx + Math.cos(ang) * 20, dy + Math.sin(ang) * 20,
+                  dx + Math.cos(ang + 2.2) * 11, dy + Math.sin(ang + 2.2) * 11,
+                  dx - Math.cos(ang) * 14, dy - Math.sin(ang) * 14,
+                  dx + Math.cos(ang - 2.2) * 11, dy + Math.sin(ang - 2.2) * 11,
+                ]);
+                rig.projGfx.endFill();
+              }
+            } else if (weaponStyle === 'FATE_CARDS') {
+              // 🎴 GALAXY RISKY: Orbiting Red / Yellow / Blue Fate Cards streaking across!
+              const cardCols = [0xef4444, 0xfacc15, 0x38bdf8];
+              for (let c = 0; c < 3; c++) {
+                const ct = Math.min(1, Math.max(0, (p - 0.1 - c * 0.05) / 0.38));
+                if (ct <= 0 || ct >= 1) continue;
+                const cx = curActorX + (ix - curActorX) * ct;
+                const cy = iy + Math.sin(ct * Math.PI * 3 + c * 2) * 36;
+                rig.projGfx.lineStyle(2.5, 0xfef08a, 0.98);
+                rig.projGfx.beginFill(cardCols[c], 0.95);
+                rig.projGfx.drawRoundedRect(cx - 12, cy - 17, 24, 34, 4);
+                rig.projGfx.endFill();
+              }
+            } else if (weaponStyle === 'CHESS_DROP') {
+              // ♟️ GALAXY CHESS MASTER: Giant Glowing Chess King crashing straight down from the sky onto enemy!
+              if (p >= 0.14 && p < 0.62) {
+                const dropP = Math.min(1, (p - 0.14) / 0.3);
+                const chessY = -90 + (iy + 100) * (dropP * dropP);
+                const cAlpha = p < 0.48 ? 0.95 : Math.max(0, 1 - (p - 0.48) / 0.14);
+                rig.projGfx.lineStyle(4, 0xfef08a, cAlpha);
+                rig.projGfx.beginFill(0x0ea5e9, cAlpha * 0.82);
+                // Giant Chess King crown + body silhouette
+                rig.projGfx.drawPolygon([
+                  ix - 42, chessY + 48,
+                  ix + 42, chessY + 48,
+                  ix + 26, chessY - 22,
+                  ix + 38, chessY - 58,
+                  ix + 12, chessY - 40,
+                  ix, chessY - 76,
+                  ix - 12, chessY - 40,
+                  ix - 38, chessY - 58,
+                  ix - 26, chessY - 22,
+                ]);
+                rig.projGfx.endFill();
+              }
+            } else if (weaponStyle === 'DEMON_FAN_KATANA') {
+              // 🪭 MEGA HYON: Swirling lavender talismans + twin crescent katana/fan slashes!
+              const hAlpha = Math.sin(Math.min(1, projT) * Math.PI);
+              rig.projGfx.lineStyle(12 * hAlpha + 2, 0xc084fc, hAlpha * 0.92);
+              rig.projGfx.arc(projX, iy, 68, dir > 0 ? -1.1 : Math.PI - 1.1, dir > 0 ? 1.1 : Math.PI + 1.1);
+              rig.projGfx.lineStyle(5 * hAlpha + 1, 0xfef08a, hAlpha);
+              rig.projGfx.arc(projX + dir * 12, iy, 54, dir > 0 ? -0.95 : Math.PI - 0.95, dir > 0 ? 0.95 : Math.PI + 0.95);
+              for (let t = 0; t < 4; t++) {
+                const tx = projX - dir * (25 + t * 22);
+                const ty = iy + Math.sin(elapsedTotal * 12 + t * 1.6) * 42;
+                rig.projGfx.beginFill(0xfef08a, 0.85);
+                rig.projGfx.drawRect(tx - 5, ty - 11, 10, 22);
+                rig.projGfx.endFill();
+              }
+            } else if (weaponStyle === 'FOX_CLAW') {
+              // 🦊 MEGA AHRINA: 3 parallel blazing golden-crimson kitsune claw gashes!
+              if (p >= 0.28 && p < 0.64) {
+                const cp = (p - 0.28) / 0.36;
+                const cAlpha = Math.sin(cp * Math.PI);
+                for (let c = -1; c <= 1; c++) {
+                  const off = c * 26;
+                  rig.projGfx.lineStyle(10 * cAlpha + 2, 0xf43f5e, cAlpha * 0.95);
+                  rig.projGfx.moveTo(ix - 74 + off * 0.4, iy - 68 + off);
+                  rig.projGfx.lineTo(ix + 74 + off * 0.4, iy + 68 + off);
+                  rig.projGfx.lineStyle(4 * cAlpha, 0xfef08a, cAlpha);
+                  rig.projGfx.moveTo(ix - 64 + off * 0.4, iy - 58 + off);
+                  rig.projGfx.lineTo(ix + 64 + off * 0.4, iy + 58 + off);
+                }
+              }
+            } else if (weaponStyle === 'FLAME_FIST') {
+              // 🥊 MEGA FIREWARE / ZERO / GLANK: Colossal Flaming/Armored Gauntlet Shockwave Punch!
+              const isGlank = actorSpriteId?.includes('glank');
+              const fistCol = isGlank ? 0x38bdf8 : 0xf97316;
+              if (p >= 0.26 && p < 0.62) {
+                const fp = (p - 0.26) / 0.36;
+                const fAlpha = Math.sin(fp * Math.PI);
+                const fx = curActorX + dir * 64;
+                rig.projGfx.beginFill(fistCol, fAlpha * 0.52);
+                rig.projGfx.drawCircle(fx, iy, 48 + fp * 44);
+                rig.projGfx.endFill();
+                rig.projGfx.lineStyle(7 * fAlpha, 0xfef08a, fAlpha);
+                rig.projGfx.drawCircle(fx, iy, 36 + fp * 68);
+                rig.projGfx.lineStyle(4 * fAlpha, fistCol, fAlpha * 0.9);
+                rig.projGfx.drawEllipse(ix, rig.baseY + 38, 40 + fp * 110, 14 + fp * 26);
+              }
+            } else if (weaponStyle === 'ICE_SPIKES') {
+              // ❄️ MEGA PRYSMA / TWIN FROST / GALAXY AQUAR: Jagged Iceberg / Water-Crystal Spears erupting beneath target!
+              if (p >= 0.2 && p < 0.65) {
+                const ip = (p - 0.2) / 0.45;
+                const rise = Math.sin(Math.min(1, ip) * Math.PI);
+                for (let k = -2; k <= 2; k++) {
+                  const sx = ix + k * 34;
+                  const sh = (k === 0 ? 210 : Math.abs(k) === 1 ? 155 : 105) * rise;
+                  rig.projGfx.lineStyle(3, 0xe0f2fe, rise);
+                  rig.projGfx.beginFill(k % 2 === 0 ? 0x38bdf8 : 0x7dd3fc, rise * 0.85);
+                  rig.projGfx.drawPolygon([sx, rig.baseY + 44 - sh, sx - 20, rig.baseY + 44, sx + 20, rig.baseY + 44]);
+                  rig.projGfx.endFill();
+                }
+              }
+            } else if (weaponStyle === 'PHOENIX_FLAME') {
+              // 🔥 MEGA TWIN FLAME / BOSS HUMEX: Giant Golden-Red Phoenix Wings + Spiraling Fire Vortex!
+              const wAlpha = Math.sin(Math.min(1, p / 0.62) * Math.PI);
+              // Phoenix fire wave spiraling to enemy
+              for (let s = 0; s < 6; s++) {
+                const pt = Math.max(0, projT - s * 0.055);
+                const fx = actorX + (targetX - actorX) * pt;
+                const fy = iy + Math.sin(pt * Math.PI * 5 + s) * 26;
+                rig.projGfx.beginFill(s % 2 === 0 ? 0xef4444 : 0xfacc15, wAlpha * (0.6 - s * 0.08));
+                rig.projGfx.drawCircle(fx, fy, 34 - s * 3);
+                rig.projGfx.endFill();
+              }
+            } else if (weaponStyle === 'ANGEL_HALO') {
+              // ✨ MEGA PRIEST / GALAXY FAIRY / GOD / BLUME: Sacred Halo Ring + Radiant Beams/Feathers!
+              const isFairy = actorSpriteId?.includes('fairy');
+              const isBlume = actorSpriteId?.includes('blume');
+              const haloCol = isFairy ? 0x4ade80 : isBlume ? 0xf472b6 : 0xfef08a;
+              const hAlpha = Math.sin(Math.min(1, p / 0.62) * Math.PI);
+              rig.projGfx.lineStyle(5, haloCol, hAlpha * 0.95);
+              rig.projGfx.drawCircle(curActorX, curActorY - 12, 48 + projT * 52);
+              // Radiant light beam to enemy
+              rig.projGfx.lineStyle(isSkillCast ? 28 : 16, haloCol, hAlpha * 0.45);
+              rig.projGfx.moveTo(curActorX + dir * 24, iy - 6);
+              rig.projGfx.lineTo(ix, iy);
+              rig.projGfx.lineStyle(8, 0xffffff, hAlpha * 0.95);
+              rig.projGfx.moveTo(curActorX + dir * 24, iy - 6);
+              rig.projGfx.lineTo(ix, iy);
+            } else if (weaponStyle === 'VOID_PORTAL') {
+              // 🌀 BOSS SPETRA / BOSS AXCEL: Purple-black Void Portal + Crimson Scythe Orbs!
+              const vAlpha = Math.sin(Math.min(1, p / 0.62) * Math.PI);
+              rig.projGfx.lineStyle(6, 0xa855f7, vAlpha);
+              rig.projGfx.beginFill(0x1e0536, vAlpha * 0.85);
+              rig.projGfx.drawEllipse(curActorX + dir * 48, iy, 28, 66);
+              rig.projGfx.endFill();
+              // Dark void orb streaking into enemy
+              rig.projGfx.beginFill(0x7e22ce, 0.72);
+              rig.projGfx.drawCircle(projX, projY, orbRadius + 14);
+              rig.projGfx.endFill();
+              rig.projGfx.beginFill(0x090414, 0.95);
+              rig.projGfx.drawCircle(projX, projY, orbRadius * 0.7);
+              rig.projGfx.endFill();
+              rig.projGfx.lineStyle(3.5, 0xf43f5e, 0.95);
+              rig.projGfx.drawCircle(projX, projY, orbRadius + 6);
+            } else if (weaponStyle === 'ANCIENT_DRAGON_STORM') {
+              // 🐉 ANCIENT RAYQUAZA (A3): Emerald Sky Dragon Vortex + Golden Paralysis Lightning & Hyper Dragon Beam!
+              const sAlpha = Math.sin(Math.min(1, p / 0.64) * Math.PI);
+              // Emerald-gold swirling dragon energy beam from mouth to enemy
+              rig.projGfx.lineStyle(isSkillCast ? 36 : 22, 0x10b981, sAlpha * 0.55);
+              rig.projGfx.moveTo(curActorX + dir * 42, iy - 14);
+              rig.projGfx.lineTo(ix, iy);
+              rig.projGfx.lineStyle(isSkillCast ? 14 : 9, 0xfacc15, sAlpha * 0.92);
+              rig.projGfx.moveTo(curActorX + dir * 42, iy - 14);
+              rig.projGfx.lineTo(ix, iy);
+              rig.projGfx.lineStyle(5, 0xffffff, sAlpha);
+              rig.projGfx.moveTo(curActorX + dir * 42, iy - 14);
+              rig.projGfx.lineTo(ix, iy);
+              // Spiraling emerald wind ribbons + crackling golden paralysis lightning around enemy
+              for (let r = 0; r < 5; r++) {
+                const rt = Math.max(0, projT - r * 0.08);
+                const rx = curActorX + (ix - curActorX) * rt;
+                const ry = iy + Math.sin(rt * Math.PI * 6 + r * 1.4) * 34;
+                rig.projGfx.beginFill(r % 2 === 0 ? 0x34d399 : 0xfde047, sAlpha * 0.78);
+                rig.projGfx.drawCircle(rx, ry, 18 - r * 2);
+                rig.projGfx.endFill();
+              }
+              if (p > 0.22) {
+                for (let bolt = -1; bolt <= 1; bolt++) {
+                  rig.projGfx.lineStyle(isSkillCast ? 5 : 3.5, 0xfef08a, sAlpha);
+                  const bx = ix + bolt * 34;
+                  rig.projGfx.moveTo(bx, 0);
+                  rig.projGfx.lineTo(bx + (bolt % 2 === 0 ? 18 : -18), iy * 0.38);
+                  rig.projGfx.lineTo(bx - (bolt % 2 === 0 ? 14 : -14), iy * 0.72);
+                  rig.projGfx.lineTo(ix + bolt * 16, iy + 22);
+                }
+              }
+            } else if (weaponStyle === 'ANCIENT_JUDGMENT') {
+              // ✨ ANCIENT ARCEUS (A1): Radiant Twin Golden Angel Wings + 3 Celestial Judgment Light Pillars!
+              const jAlpha = Math.sin(Math.min(1, p / 0.64) * Math.PI);
+              // Twin radiant golden wings fanning out behind Arceus
+              for (const sideSign of [-1, 1]) {
+                rig.projGfx.lineStyle(4, 0xfef08a, jAlpha * 0.95);
+                rig.projGfx.beginFill(0xfacc15, jAlpha * 0.42);
+                rig.projGfx.drawPolygon([
+                  curActorX, curActorY - 16,
+                  curActorX + sideSign * (92 + projT * 46), curActorY - 96 - projT * 24,
+                  curActorX + sideSign * (112 + projT * 38), curActorY - 26,
+                  curActorX + sideSign * (64 + projT * 24), curActorY + 12,
+                ]);
+                rig.projGfx.endFill();
+              }
+              // 3 descending celestial Judgment pillars crashing onto the target!
+              if (p >= 0.16) {
+                for (let k = -1; k <= 1; k++) {
+                  const px = ix + k * 48;
+                  const pw = k === 0 ? (isSkillCast ? 44 : 30) : (isSkillCast ? 26 : 18);
+                  rig.projGfx.beginFill(k === 0 ? 0xfacc15 : 0x38bdf8, jAlpha * 0.48);
+                  rig.projGfx.drawRect(px - pw / 2, 0, pw, rig.baseY + 42);
+                  rig.projGfx.endFill();
+                  rig.projGfx.beginFill(0xffffff, jAlpha * 0.85);
+                  rig.projGfx.drawRect(px - pw * 0.22, 0, pw * 0.44, rig.baseY + 42);
+                  rig.projGfx.endFill();
+                }
+                rig.projGfx.lineStyle(4, 0xfef08a, jAlpha);
+                rig.projGfx.drawEllipse(ix, rig.baseY + 34, 48 + projT * 96, 14 + projT * 22);
+              }
+            } else if (elem === 'KIM') {
               // ⚡ KIM: Jagged sky-to-target lightning bolt + golden razor crescents
               if (p > 0.22) {
                 rig.projGfx.lineStyle(isSkillCast ? 6 : 4, 0xfef08a, 0.95);
@@ -592,13 +997,12 @@ export function SpineStageCanvas({
                 rig.projGfx.lineTo(ix + (Math.random() - 0.5) * 26, iy * 0.5);
                 rig.projGfx.lineTo(ix, iy);
               }
-              // Golden blade wave
               rig.projGfx.lineStyle(isSkillCast ? 6 : 4, 0xfacc15, 0.95);
               const arcStart = dir > 0 ? -Math.PI * 0.45 : Math.PI * 0.55;
               const arcEnd = dir > 0 ? Math.PI * 0.45 : Math.PI * 1.45;
               rig.projGfx.arc(projX, projY, orbRadius + 16, arcStart, arcEnd);
             } else if (elem === 'THO') {
-              // 🪨 THỔ: Molten meteor plunging diagonally from upper sky into target
+              // 🪨 THỔ: Molten meteor plunging diagonally into target
               const metX = ix - dir * 180 * (1 - projT);
               const metY = -30 + (iy + 30) * projT;
               rig.projGfx.beginFill(0xf97316, 0.45);
@@ -617,7 +1021,7 @@ export function SpineStageCanvas({
               rig.projGfx.moveTo(metX, metY);
               rig.projGfx.lineTo(metX - dir * 55, metY - 48);
             } else if (elem === 'THUY') {
-              // ❄️ THỦY: Spinning 6-point frost crystal lance + cyan tidal waves
+              // ❄️ THỦY: Spinning 6-point frost crystal lance
               for (let tIdx = 3; tIdx >= 0; tIdx--) {
                 const pt = Math.max(0, projT - tIdx * 0.06);
                 const px = actorX + (targetX - actorX) * pt;
@@ -681,15 +1085,34 @@ export function SpineStageCanvas({
               rig.projGfx.endFill();
             }
 
-            // Crisp Double X-Slash + White Core
-            rig.projGfx.lineStyle(6 * slashAlpha + 1, cmdColor, slashAlpha * 0.95);
-            rig.projGfx.moveTo(ix - span, iy - span * 0.78);
-            rig.projGfx.lineTo(ix + span, iy + span * 0.78);
-            rig.projGfx.moveTo(ix + span, iy - span * 0.78);
-            rig.projGfx.lineTo(ix - span, iy + span * 0.78);
-            rig.projGfx.lineStyle(2.8 * slashAlpha, 0xffffff, slashAlpha);
-            rig.projGfx.moveTo(ix - span * 0.82, iy - span * 0.62);
-            rig.projGfx.lineTo(ix + span * 0.82, iy + span * 0.62);
+            // Multi-layered PokiGuard Radiant Weapon Slash + Comic Starburst Rays on Impact!
+            rig.projGfx.lineStyle(8 * slashAlpha + 2, 0xfde047, slashAlpha * 0.92);
+            rig.projGfx.moveTo(ix - span * 1.15, iy - span * 0.85);
+            rig.projGfx.lineTo(ix + span * 1.15, iy + span * 0.85);
+            rig.projGfx.moveTo(ix + span * 1.15, iy - span * 0.85);
+            rig.projGfx.lineTo(ix - span * 1.15, iy + span * 0.85);
+            rig.projGfx.lineStyle(5 * slashAlpha + 1, cmdColor, slashAlpha * 0.95);
+            rig.projGfx.moveTo(ix - span * 1.25, iy);
+            rig.projGfx.lineTo(ix + span * 1.25, iy);
+            rig.projGfx.lineStyle(3.2 * slashAlpha, 0xffffff, slashAlpha);
+            rig.projGfx.moveTo(ix - span * 0.95, iy - span * 0.7);
+            rig.projGfx.lineTo(ix + span * 0.95, iy + span * 0.7);
+            rig.projGfx.moveTo(ix + span * 0.95, iy - span * 0.7);
+            rig.projGfx.lineTo(ix - span * 0.95, iy + span * 0.7);
+            // Jagged starburst flare rays behind impact
+            if (isSkillCast || anim.cmd.crit) {
+              const rayOuter = span * 1.45;
+              const rayInner = span * 0.45;
+              rig.projGfx.beginFill(0xfef08a, slashAlpha * 0.35);
+              const starPts: number[] = [];
+              for (let k = 0; k < 16; k++) {
+                const ang = (k * Math.PI) / 8 + slashProg * 0.8;
+                const rad = k % 2 === 0 ? rayOuter : rayInner;
+                starPts.push(ix + Math.cos(ang) * rad, iy + Math.sin(ang) * rad);
+              }
+              rig.projGfx.drawPolygon(starPts);
+              rig.projGfx.endFill();
+            }
           }
 
           if (!anim.impactFired && p >= 0.4) {
@@ -1135,19 +1558,20 @@ export function SpineStageCanvas({
           }
         : null;
     if (!resolvedCmd || !rigRef.current) return;
-    const duration =
+    const baseDuration =
       resolvedCmd.type === 'SKILL'
         ? 0.78
         : resolvedCmd.type === 'HIT'
           ? 0.38
           : 0.62;
+    const duration = baseDuration / (speedMultiplier > 1 ? 1.75 : 1);
     rigRef.current.activeAnim = {
       cmd: resolvedCmd,
       elapsed: 0,
       duration,
       impactFired: false,
     };
-  }, [animCommand, actionCue]);
+  }, [animCommand, actionCue, speedMultiplier]);
 
   return (
     <div

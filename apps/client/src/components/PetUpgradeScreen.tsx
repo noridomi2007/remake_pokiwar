@@ -9,7 +9,9 @@ import {
   getPetById,
   getPetSpriteId,
   getPetSpritePath,
+  getSingleStoneUpgradeRate,
   MAX_PET_LEVEL,
+  MAX_UPGRADE_STONE_SLOTS,
   PET_BREAKTHROUGH_GEN_COSTS,
   PET_BREAKTHROUGH_GOLD_COSTS,
   PET_BREAKTHROUGH_SHARD_COSTS,
@@ -34,8 +36,6 @@ interface PetUpgradeScreenProps {
     goldCost: number,
     stoneCost: number,
     stoneLv: number,
-    useBinhAn: boolean,
-    useMayMan: boolean,
     stackedStones?: [number, number, number, number, number],
   ) => { success: boolean; message: string };
   onEvolvePet?: (petId: string, goldCost: number, stoneCost: number) => void;
@@ -69,8 +69,8 @@ const TIER_LABELS: Record<EvolutionTier, string> = {
 };
 
 const TIER_RANK_ORDER: Record<EvolutionTier, number> = {
-  FANTASY: 8,
-  ANCIENT: 7,
+  ANCIENT: 8,
+  FANTASY: 7,
   GALAXY: 6,
   MEGA: 5,
   LEGEND: 4,
@@ -81,8 +81,8 @@ const TIER_RANK_ORDER: Record<EvolutionTier, number> = {
 };
 
 const TIER_BADGE_STYLE: Record<EvolutionTier, { tag: string; bg: string; color: string }> = {
+  ANCIENT: { tag: 'A', bg: '#b45309', color: '#fef08a' },
   FANTASY: { tag: 'F', bg: '#7e22ce', color: '#fef08a' },
-  ANCIENT: { tag: 'CĐ', bg: '#0e7490', color: '#e0f2fe' },
   GALAXY: { tag: 'G', bg: '#1d4ed8', color: '#bae6fd' },
   MEGA: { tag: 'M', bg: '#c2410c', color: '#fef08a' },
   LEGEND: { tag: 'HT', bg: '#b91c1c', color: '#fee2e2' },
@@ -92,10 +92,10 @@ const TIER_BADGE_STYLE: Record<EvolutionTier, { tag: string; bg: string; color: 
   BASE: { tag: 'B', bg: '#1e293b', color: '#cbd5e1' },
 };
 
-const TIER_FILTER_TABS: readonly { key: 'ALL' | 'FANTASY' | 'ANCIENT' | 'GALAXY' | 'MEGA' | 'LEGEND' | 'BASIC'; label: string }[] = [
+const TIER_FILTER_TABS: readonly { key: 'ALL' | 'ANCIENT' | 'FANTASY' | 'GALAXY' | 'MEGA' | 'LEGEND' | 'BASIC'; label: string }[] = [
   { key: 'ALL', label: 'Tất cả' },
+  { key: 'ANCIENT', label: 'Ancient' },
   { key: 'FANTASY', label: 'Fantasy' },
-  { key: 'ANCIENT', label: 'Cổ Đại' },
   { key: 'GALAXY', label: 'Galaxy' },
   { key: 'MEGA', label: 'Mega' },
   { key: 'LEGEND', label: 'Huyền Thoại' },
@@ -130,9 +130,11 @@ export function PetUpgradeScreen({
   const [elementFilter, setElementFilter] = useState<'ALL' | ElementType>('ALL');
   const [tierFilter, setTierFilter] = useState<'ALL' | 'FANTASY' | 'ANCIENT' | 'GALAXY' | 'MEGA' | 'LEGEND' | 'BASIC'>('ALL');
   const [selectedStoneLv, setSelectedStoneLv] = useState<number>(3);
-  const [stackedStones, setStackedStones] = useState<[number, number, number, number, number]>([0, 0, 1, 0, 0]);
-  const [useBinhAn, setUseBinhAn] = useState(false);
-  const [useMayMan, setUseMayMan] = useState(true);
+  const [sockets, setSockets] = useState<(number | null)[]>(() => {
+    const bag = progress.stoneBag ?? [8, 4, 2, 1, 0];
+    const firstIdx = [2, 1, 0, 3, 4].find((i) => (bag[i] ?? 0) > 0);
+    return [firstIdx !== undefined ? firstIdx + 1 : null, null, null];
+  });
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const dockScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -141,7 +143,6 @@ export function PetUpgradeScreen({
   }, [initialTab]);
 
   const stoneBag = progress.stoneBag ?? [8, 4, 2, 1, 0];
-  const charms = progress.charms ?? { binhAn: 2, mayMan: 2 };
   const unlockedPets = progress.unlockedPets ?? [progress.selectedPetId, 'pet-581', 'pet-583', 'pet-1431', 'pet-725'];
   const petShards = progress.petShards ?? {};
   const petStars = progress.petStars ?? {};
@@ -193,15 +194,23 @@ export function PetUpgradeScreen({
   const currentPower = computePetPower(currentPet);
   const nextLvPower = computePetPower(nextLvPet);
 
-  // Clamp stacked stones to player's stoneBag
-  const effectiveStack: [number, number, number, number, number] = [
-    Math.min(stackedStones[0], stoneBag[0] ?? 0),
-    Math.min(stackedStones[1], stoneBag[1] ?? 0),
-    Math.min(stackedStones[2], stoneBag[2] ?? 0),
-    Math.min(stackedStones[3], stoneBag[3] ?? 0),
-    Math.min(stackedStones[4], stoneBag[4] ?? 0),
-  ];
-  const totalStackedCount = effectiveStack.reduce((a, b) => a + b, 0);
+  // Clamp 3 stone sockets against player's stoneBag so consumed stones clear automatically
+  const remainingBag = [...stoneBag] as [number, number, number, number, number];
+  const effectiveSockets: (number | null)[] = Array.from({ length: MAX_UPGRADE_STONE_SLOTS }, (_, idx) => {
+    const lv = sockets[idx] ?? null;
+    if (lv === null) return null;
+    const bagIdx = lv - 1;
+    if ((remainingBag[bagIdx] ?? 0) > 0) {
+      remainingBag[bagIdx] -= 1;
+      return lv;
+    }
+    return null;
+  });
+  const effectiveStack: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+  for (const lv of effectiveSockets) {
+    if (lv !== null) effectiveStack[lv - 1] += 1;
+  }
+  const totalStackedCount = effectiveSockets.filter((lv) => lv !== null).length;
 
   // Pokiwar Zing Me (4.0) Synthesis Recipe & Child Pets
   const recipe = basePet.synthesisRecipe;
@@ -219,23 +228,14 @@ export function PetUpgradeScreen({
 
   const derivedPets = STARTER_PETS.filter((p) => p.synthesisRecipe?.requiredPetId === basePet.id);
 
-  const hasBinhAn = useBinhAn && charms.binhAn > 0;
-  const hasMayMan = useMayMan && charms.mayMan > 0;
-  const fallbackStack: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-  fallbackStack[selectedStoneLv - 1] = 1;
-  const upgradeRate = calcMultiStoneUpgradeRate(
-    currentLv,
-    totalStackedCount > 0 ? effectiveStack : fallbackStack,
-    accLuck,
-    hasMayMan,
-  );
+  const upgradeRate = calcMultiStoneUpgradeRate(currentLv, effectiveStack, accLuck);
 
   const selectedStoneCount = stoneBag[selectedStoneLv - 1] ?? 0;
   const canAffordUpgrade =
     !isMaxLevel &&
     isPetUnlocked &&
     progress.gold >= upGold &&
-    (totalStackedCount > 0 || selectedStoneCount > 0 || progress.stones >= upStones);
+    totalStackedCount > 0;
   const canAffordStarUpgrade =
     isPetUnlocked && starCount < 6 && shardCount >= nextStarShardCost && progress.gold >= nextStarGoldCost;
   const canAffordGenUpgrade =
@@ -247,20 +247,64 @@ export function PetUpgradeScreen({
     genCores >= nextBtGenCost &&
     shardCount >= nextBtShardCost;
 
+  const handleInsertStone = (lv: number) => {
+    setSelectedStoneLv(lv);
+    const qty = stoneBag[lv - 1] ?? 0;
+    const used = effectiveStack[lv - 1] ?? 0;
+    if (qty <= used) {
+      setFeedback({
+        ok: false,
+        text: qty === 0 ? `Bạn chưa có Đá C${lv} trong túi!` : `Đã lắp hết ${qty} viên Đá C${lv}!`,
+      });
+      setTimeout(() => setFeedback(null), 1800);
+      return;
+    }
+    const next = [...effectiveSockets];
+    const emptyIdx = next.findIndex((s) => s === null);
+    if (emptyIdx === -1) {
+      setFeedback({
+        ok: false,
+        text: `Đã lắp đủ ${MAX_UPGRADE_STONE_SLOTS}/${MAX_UPGRADE_STONE_SLOTS} ô đá! Nhấn vào ô đá bên dưới để tháo bớt.`,
+      });
+      setTimeout(() => setFeedback(null), 1900);
+      return;
+    }
+    next[emptyIdx] = lv;
+    setSockets(next);
+  };
+
+  const handleRemoveSocket = (slotIdx: number) => {
+    const next = [...effectiveSockets];
+    next[slotIdx] = null;
+    setSockets(next);
+  };
+
   const handleQuickStackStones = () => {
-    const next: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+    if (isMaxLevel) return;
+    const avail = [...stoneBag] as [number, number, number, number, number];
+    const chosen: (number | null)[] = [null, null, null];
+    const stack: [number, number, number, number, number] = [0, 0, 0, 0, 0];
     let added = 0;
-    for (let i = 4; i >= 0; i--) {
-      const avail = stoneBag[i] ?? 0;
-      while (next[i] < avail && added < 4 && calcMultiStoneUpgradeRate(currentLv, next, accLuck, hasMayMan) < 100) {
-        next[i] += 1;
+    for (let i = 4; i >= 0 && added < MAX_UPGRADE_STONE_SLOTS; i--) {
+      while (
+        avail[i] > 0 &&
+        added < MAX_UPGRADE_STONE_SLOTS &&
+        calcMultiStoneUpgradeRate(currentLv, stack, accLuck) < 100
+      ) {
+        avail[i] -= 1;
+        stack[i] += 1;
+        chosen[added] = i + 1;
         added += 1;
       }
     }
-    setStackedStones(next);
+    setSockets(chosen);
+    const nextRate = calcMultiStoneUpgradeRate(currentLv, stack, accLuck);
     setFeedback({
-      ok: true,
-      text: `⚡ Xếp Nhanh ${added} viên đá — Tỉ lệ thành công: ${calcMultiStoneUpgradeRate(currentLv, next, accLuck, hasMayMan)}%!`,
+      ok: added > 0,
+      text:
+        added > 0
+          ? `⚡ Lắp nhanh ${added}/${MAX_UPGRADE_STONE_SLOTS} viên đá — Tổng tỉ lệ: ${nextRate}%!`
+          : 'Túi không còn Đá C1–C5! Hãy mua thêm ở Shop hoặc đi vượt ải.',
     });
     setTimeout(() => setFeedback(null), 2000);
   };
@@ -343,8 +387,6 @@ export function PetUpgradeScreen({
       upGold,
       upStones,
       selectedStoneLv,
-      hasBinhAn,
-      hasMayMan,
       totalStackedCount > 0 ? effectiveStack : undefined,
     );
     setFeedback({ ok: res.success, text: res.message });
@@ -837,14 +879,12 @@ export function PetUpgradeScreen({
                 <div style={{ fontSize: 9.5, color: '#fde047', fontWeight: 800 }}>
                   Tích lũy xịt: +{accLuck}% • Gen T2: Lv.{genLevel}/5 • Đột Phá: +{petBtLevel}/5
                 </div>
-                <div style={{ fontSize: 9.5, color: isMaxLevel ? '#fde047' : hasBinhAn ? '#86efac' : '#fca5a5', fontWeight: 700 }}>
+                <div style={{ fontSize: 9.5, color: isMaxLevel ? '#fde047' : '#86efac', fontWeight: 700 }}>
                   {isMaxLevel
                     ? 'Nâng Sao, Gen T2 & Đột Phá để tăng lực chiến!'
-                    : hasBinhAn
-                      ? 'Bùa Bình An: Bảo vệ'
-                      : upgradeRate < 100
-                        ? 'Xịt tụt 1 Lv (+10% tích lũy)'
-                        : 'An toàn 100%'}
+                    : upgradeRate >= 100
+                      ? 'An toàn 100% — Chắc chắn lên cấp!'
+                      : '🛡️ Thất bại KHÔNG tụt cấp (+10% tích lũy)'}
                 </div>
               </div>
 
@@ -1046,7 +1086,7 @@ export function PetUpgradeScreen({
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 900, color: '#ffe08a' }}>
-                ĐÁ ĐẬP LEVEL ({totalStackedCount}/4 viên)
+                ĐÁ ĐẬP LEVEL ({totalStackedCount}/{MAX_UPGRADE_STONE_SLOTS} ô)
               </span>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button
@@ -1054,7 +1094,7 @@ export function PetUpgradeScreen({
                   className="pk-btn-gold"
                   style={{ padding: '2px 7px', fontSize: 9.5 }}
                   onClick={handleQuickStackStones}
-                  title="Tự động xếp nhiều viên đá để đẩy tỉ lệ đập lên tới 100% chuẩn Pokiwar 4.0!"
+                  title="Tự động lắp tối đa 3 viên đá để tối ưu tỉ lệ lên cấp!"
                 >
                   ⚡ Xếp Nhanh
                 </button>
@@ -1081,39 +1121,28 @@ export function PetUpgradeScreen({
               </div>
             </div>
 
-            {/* StoneStrip 2x3 Grid (Multi-stone Stackable!) */}
+            {/* StoneStrip 2x3 Grid (Click to socket stone into 3 slots; live per-stone rate decays by Pet Lv) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
               {[1, 2, 3, 4, 5].map((lv) => {
                 const qty = stoneBag[lv - 1] ?? 0;
                 const usedCnt = effectiveStack[lv - 1] ?? 0;
+                const singleRate = getSingleStoneUpgradeRate(currentLv, lv);
                 return (
                   <button
                     key={lv}
                     type="button"
                     className={`pk-stone-card ${usedCnt > 0 || selectedStoneLv === lv ? 'selected' : ''}`}
-                    style={{ position: 'relative' }}
-                    onClick={() => {
-                      setSelectedStoneLv(lv);
-                      setStackedStones((prev) => {
-                        const next = [...prev] as [number, number, number, number, number];
-                        const curTotal = next.reduce((a, b) => a + b, 0);
-                        if (next[lv - 1] < qty && curTotal < 4) {
-                          next[lv - 1] += 1;
-                        } else {
-                          next[lv - 1] = 0;
-                        }
-                        return next;
-                      });
-                    }}
-                    title="Nhấn để xếp thêm Đá vào lò đập (tối đa 4 viên/lần)"
+                    style={{ position: 'relative', padding: '4px 3px' }}
+                    onClick={() => handleInsertStone(lv)}
+                    title={`Nhấn để lắp Đá C${lv} (+${singleRate}% ở Lv.${currentLv}) vào 1 trong 3 ô đá`}
                   >
                     {usedCnt > 0 && (
                       <span
                         style={{
                           position: 'absolute',
                           top: 2,
-                          right: 4,
-                          fontSize: 9.5,
+                          right: 3,
+                          fontSize: 9,
                           fontWeight: 900,
                           padding: '0 4px',
                           borderRadius: 999,
@@ -1121,16 +1150,19 @@ export function PetUpgradeScreen({
                           color: '#fff',
                         }}
                       >
-                        +{usedCnt}
+                        ×{usedCnt}
                       </span>
                     )}
                     <img
                       src={`/assets/pokiguard/sprites/stone_${stoneKey}_${lv}.png`}
                       alt={`Đá Lv${lv}`}
-                      style={{ width: 32, height: 32, objectFit: 'contain' }}
+                      style={{ width: 28, height: 28, objectFit: 'contain' }}
                     />
-                    <span className="pk-num-font" style={{ fontSize: 10.5, color: '#ffe08a' }}>
+                    <span className="pk-num-font" style={{ fontSize: 10, color: '#ffe08a', lineHeight: 1.1 }}>
                       C{lv} • x{qty}
+                    </span>
+                    <span style={{ fontSize: 9.2, fontWeight: 900, color: isMaxLevel ? '#94a3b8' : '#4ade80', lineHeight: 1 }}>
+                      {isMaxLevel ? 'MAX' : `+${singleRate}%`}
                     </span>
                   </button>
                 );
@@ -1138,66 +1170,81 @@ export function PetUpgradeScreen({
               <button
                 type="button"
                 className="pk-stone-card"
-                onClick={() => setStackedStones([0, 0, 0, 0, 0])}
-                title="Xóa toàn bộ đá đang xếp trong lò"
+                style={{ padding: '4px 3px' }}
+                onClick={() => setSockets([null, null, null])}
+                title="Tháo toàn bộ đá khỏi 3 ô lắp"
               >
                 <span style={{ fontSize: 16 }}>🧹</span>
-                <span style={{ fontSize: 9.5, fontWeight: 900, color: '#93c5fd' }}>Xóa Lò</span>
+                <span style={{ fontSize: 9.5, fontWeight: 900, color: '#93c5fd' }}>Tháo Hết</span>
               </button>
             </div>
 
-            {/* 2 Charms */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-              <button
-                type="button"
-                onClick={() => setUseBinhAn((v) => !v)}
-                disabled={charms.binhAn <= 0}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 7px',
-                  borderRadius: 9,
-                  border: hasBinhAn ? '2px solid #4ade80' : '1.5px solid #334155',
-                  background: hasBinhAn ? 'rgba(20, 83, 45, 0.65)' : 'rgba(6, 18, 46, 0.85)',
-                  color: '#fff',
-                  cursor: charms.binhAn > 0 ? 'pointer' : 'not-allowed',
-                  opacity: charms.binhAn > 0 ? 1 : 0.5,
-                }}
-              >
-                <img src="/assets/pokiguard/sprites/charm_binh_an.png" alt="Bùa Bình An" style={{ width: 28, height: 26, objectFit: 'contain' }} />
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 10, fontWeight: 900, color: '#86efac' }}>Bình An ({charms.binhAn})</div>
-                  <div style={{ fontSize: 9, color: '#cbd5e1' }}>{hasBinhAn ? 'Đang bật' : 'Chống tụt'}</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setUseMayMan((v) => !v)}
-                disabled={charms.mayMan <= 0}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 7px',
-                  borderRadius: 9,
-                  border: hasMayMan ? '2px solid #fde047' : '1.5px solid #334155',
-                  background: hasMayMan ? 'rgba(113, 63, 18, 0.65)' : 'rgba(6, 18, 46, 0.85)',
-                  color: '#fff',
-                  cursor: charms.mayMan > 0 ? 'pointer' : 'not-allowed',
-                  opacity: charms.mayMan > 0 ? 1 : 0.5,
-                }}
-              >
-                <img src="/assets/pokiguard/sprites/charm_may_man.png" alt="Bùa May Mắn" style={{ width: 28, height: 26, objectFit: 'contain' }} />
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 10, fontWeight: 900, color: '#fef08a' }}>May Mắn ({charms.mayMan})</div>
-                  <div style={{ fontSize: 9, color: '#cbd5e1' }}>{hasMayMan ? '+15% Tỉ lệ' : 'Chưa bật'}</div>
-                </div>
-              </button>
+            {/* 3-Stone Socket Bar (Lắp tối đa 3 viên đá — nhấn vào ô để tháo) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+              {effectiveSockets.map((slottedLv, slotIdx) => {
+                const slotRate = slottedLv !== null ? getSingleStoneUpgradeRate(currentLv, slottedLv) : 0;
+                return (
+                  <button
+                    key={slotIdx}
+                    type="button"
+                    onClick={() => slottedLv !== null && handleRemoveSocket(slotIdx)}
+                    style={{
+                      position: 'relative',
+                      height: 54,
+                      borderRadius: 9,
+                      border: slottedLv !== null ? '2px solid #4ade80' : '1.5px dashed rgba(56, 189, 248, 0.55)',
+                      background: slottedLv !== null ? 'rgba(20, 83, 45, 0.52)' : 'rgba(6, 18, 46, 0.78)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 1,
+                      padding: '3px 4px',
+                      cursor: slottedLv !== null ? 'pointer' : 'default',
+                      color: '#fff',
+                    }}
+                    title={
+                      slottedLv !== null
+                        ? `Ô Đá ${slotIdx + 1}: Đá C${slottedLv} (+${slotRate}%) — Nhấn để tháo`
+                        : `Ô Đá ${slotIdx + 1} trống — Chọn đá ở trên để lắp`
+                    }
+                  >
+                    {slottedLv !== null ? (
+                      <>
+                        <span
+                          style={{
+                            position: 'absolute',
+                            top: 1,
+                            right: 4,
+                            fontSize: 9,
+                            fontWeight: 900,
+                            color: '#fca5a5',
+                          }}
+                        >
+                          ×
+                        </span>
+                        <img
+                          src={`/assets/pokiguard/sprites/stone_${stoneKey}_${slottedLv}.png`}
+                          alt={`Đá C${slottedLv}`}
+                          style={{ width: 24, height: 24, objectFit: 'contain' }}
+                        />
+                        <span style={{ fontSize: 9.5, fontWeight: 900, color: '#fef08a', lineHeight: 1.05 }}>
+                          C{slottedLv}{' '}
+                          <span style={{ color: '#4ade80' }}>+{slotRate}%</span>
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 14, color: '#38bdf8', fontWeight: 900, lineHeight: 1 }}>+</span>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8' }}>Ô Đá {slotIdx + 1}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Bottom BtnStone: Stones ONLY upgrade Level in Pokiwar Zing Me (4.0) */}
+            {/* Bottom BtnStone: 3-Stone Socket Level Up (No downgrade on fail) */}
             <button
               type="button"
               className="pk-khopet-btn-bars2"
@@ -1207,7 +1254,9 @@ export function PetUpgradeScreen({
             >
               {isMaxLevel
                 ? `👑 ĐÃ ĐẠT LEVEL TỐI ĐA (Lv.${MAX_PET_LEVEL}/${MAX_PET_LEVEL})`
-                : `ĐẬP LEVEL Lv.${currentLv + 1} (${totalStackedCount > 0 ? `${totalStackedCount} Đá • ${upgradeRate}%` : `${upStones} Đá`} • ${upGold}V)`}
+                : totalStackedCount > 0
+                  ? `ĐẬP LEVEL Lv.${currentLv + 1} (${totalStackedCount}/3 Đá • ${upgradeRate}% • ${upGold}V)`
+                  : `LẮP 1–3 VIÊN ĐÁ ĐỂ ĐẬP Lv.${currentLv + 1} (${upGold}V)`}
             </button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { SeededRandom } from './prng.js';
-import type { BoardGrid, GemCell, GemType, GravityDrop, MatchGroup, Pos } from './types.js';
+import type { BoardGrid, GemCell, GemMultiplier, GemType, GravityDrop, MatchGroup, Pos } from './types.js';
 
 export const GEM_TYPES: readonly GemType[] = [
   'SWORD',
@@ -78,11 +78,12 @@ export const GEM_META: Record<
   },
 };
 
-export function rollGemMultiplier(rng: SeededRandom): 1 | 2 | 3 | 4 {
+export function rollGemMultiplier(rng: SeededRandom): GemMultiplier {
   const roll = rng.next();
-  if (roll < 0.05) return 4;
-  if (roll < 0.13) return 3;
-  if (roll < 0.28) return 2;
+  if (roll < 0.015) return 5;
+  if (roll < 0.06) return 4;
+  if (roll < 0.14) return 3;
+  if (roll < 0.30) return 2;
   return 1;
 }
 

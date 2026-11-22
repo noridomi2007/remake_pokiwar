@@ -1,10 +1,10 @@
 import {
   ELEMENT_META,
   GEM_META,
-  GEM_TYPES,
   getAuraById,
   getPetById,
   getPetSpritePath,
+  getSkillGemProgress,
   getSupportCardScaledLabel,
   MATCH_CONSTANTS,
   SUPPORT_CARDS,
@@ -30,6 +30,7 @@ export interface FloatingPopup {
   side: Side;
   text: string;
   color: string;
+  isBurst?: boolean;
 }
 
 export interface BattleCallout {
@@ -78,9 +79,12 @@ interface BattleScreenProps {
   onOverlayPauseChange?: (paused: boolean) => void;
   mercenaryCount?: number;
   playerGold?: number;
+  battleSpeed?: 1 | 2;
+  onToggleSpeed?: () => void;
   onClaimFlipReward?: (reward: {
-    kind: 'GOLD' | 'STONE' | 'CHARM' | 'SHARD';
+    kind: 'GOLD' | 'STONE' | 'SHARD';
     amount: number;
+    stoneLv?: number;
     petId?: string;
     label: string;
     goldCost?: number;
@@ -241,13 +245,13 @@ export function BattleScreen({
   onFusionStrike,
   onSupportCard,
   onDefaultCast,
-  onPassTurn,
-  onHint,
   onLeave,
   onRetryPve,
   onOverlayPauseChange,
   mercenaryCount,
   playerGold = 0,
+  battleSpeed = 1,
+  onToggleSpeed,
   onClaimFlipReward,
 }: BattleScreenProps) {
   const enemySide: Side = yourSide === 'P1' ? 'P2' : 'P1';
@@ -277,7 +281,6 @@ export function BattleScreen({
       ? 'P2'
       : 'P1'
     : null;
-  const [showInfoDrawer, setShowInfoDrawer] = useState(false);
 
   // Emoji picker & speech bubbles
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -288,8 +291,9 @@ export function BattleScreen({
   // Post-victory 6-card Lật Thẻ May Mắn state
   interface FlipCardItem {
     id: number;
-    kind: 'GOLD' | 'STONE' | 'CHARM' | 'SHARD';
+    kind: 'GOLD' | 'STONE' | 'SHARD';
     amount: number;
+    stoneLv?: number;
     petId?: string;
     label: string;
     icon: string;
@@ -317,9 +321,9 @@ export function BattleScreen({
       const rawPool: Omit<FlipCardItem, 'id'>[] = [
         { kind: 'SHARD', amount: 8, petId: targetPet.id, label: `+8 Mảnh ${targetPet.name}`, icon: shardIcon },
         { kind: 'GOLD', amount: 450, label: '+450 Vàng', icon: '/assets/pokiguard/sprites/gold.png' },
-        { kind: 'STONE', amount: 2, label: '+2 Đá Cấp 2', icon: '/assets/pokiguard/sprites/stone_f_2.png' },
+        { kind: 'STONE', amount: 2, stoneLv: 2, label: '+2 Đá Cấp 2', icon: '/assets/pokiguard/sprites/stone_f_2.png' },
         { kind: 'SHARD', amount: 5, petId: targetPet.id, label: `+5 Mảnh ${targetPet.name}`, icon: shardIcon },
-        { kind: 'CHARM', amount: 1, label: '+1 Bùa May Mắn', icon: '/assets/pokiguard/sprites/charm_may_man.png' },
+        { kind: 'STONE', amount: 2, stoneLv: 3, label: '+2 Đá Cấp 3', icon: '/assets/pokiguard/sprites/stone_w_3.png' },
         { kind: 'GOLD', amount: 300, label: '+300 Vàng', icon: '/assets/pokiguard/sprites/gold.png' },
       ];
       // Deterministic Fisher-Yates shuffle based on battle rngState
@@ -367,6 +371,7 @@ export function BattleScreen({
     onClaimFlipReward?.({
       kind: card.kind,
       amount: card.amount,
+      stoneLv: card.stoneLv,
       petId: card.petId,
       label: card.label,
       goldCost: cost,
@@ -422,10 +427,24 @@ export function BattleScreen({
     myFighter.mana >= MATCH_CONSTANTS.FUSION_MANA_COST;
   const canDefaultCast =
     boardInteractive && myFighter.mana >= MATCH_CONSTANTS.DEFAULT_CAST_MANA_COST;
-  const canPass = boardInteractive && battleState.turnNumber > 1;
 
   const basePlayerPet = getPetById(myFighter.petId);
   const evoPreviewImg = getPetSpritePath(basePlayerPet, 'MEGA');
+  const myCombatPower = Math.round(
+    myFighter.maxHp * 0.25 + myFighter.attack * 2.4 + myFighter.magic * 2.1 + myFighter.defense * 1.6 + myFighter.speed * 8,
+  );
+  const accumPct = (myFighter.accumStacks ?? 0) * 5;
+  const starPct = Math.max(0, (myFighter.stars ?? 1) - 1);
+  const btPct = myFighter.breakthroughLevel ?? 0;
+  const gemBuffBadges = [
+    { gem: 'SWORD' as GemType, pct: 2 + starPct + Math.round(accumPct * 0.6) },
+    { gem: 'YINYANG' as GemType, pct: 2 + btPct },
+    { gem: 'FIRE' as GemType, pct: 2 + Math.floor(starPct / 2) },
+    { gem: 'HEART' as GemType, pct: 2 + Math.floor(btPct / 2) },
+    { gem: 'LIGHTNING' as GemType, pct: 2 + Math.floor((myFighter.maxMana - 250) / 800) },
+    { gem: 'COIN' as GemType, pct: 1 + (myFighter.guardPetId ? 2 : 0) },
+  ];
+  const hideBoardNow = boardFaded || Boolean(pendingQteSkill);
 
   const getRowPickLimit = (sk: SkillDef | null): number => {
     if (!sk) return 3;
@@ -478,261 +497,166 @@ export function BattleScreen({
     <div className="pk-battle-root">
       <img src={arenaBg} alt="Arena Background" className="pk-battle-bg" />
       <div className="pk-battle-vignette" />
-      {/* 1:1 POKIGUARD HEADER & FOOTER ARCH OVERLAY */}
-      <div className="pk-pg-hud-frame" />
 
-      {/* ==================== TOP SYMMETRICAL POKIGUARD BATTLE HUD ==================== */}
+      {/* ==================== TOP SYMMETRICAL 3-TIER POKIGUARD BATTLE HUD ==================== */}
       <div className="pk-battle-topbar">
-        {/* TOP-LEFT EXIT BUTTON (MatchPanel ExitButton) */}
+        {/* TOP-LEFT << EXIT BUTTON */}
         <button
           type="button"
           className="pk-pg-exit-btn"
           title="Rời trận"
           onClick={onLeave}
         >
-          <img
-            src="/assets/pokiguard/sprites/icons-04_0.png"
-            alt="Rời"
-            style={{ width: 38, height: 38, objectFit: 'contain' }}
-          />
+          «
         </button>
 
-        {/* LEFT WING: PLAYER HP / MANA / NỘ */}
-        <div className="pk-hud-wing">
-          <div className="pk-pg-hp-track">
-            <div className="pk-pg-hp-inner">
-              <div className="pk-pg-hp-fill" style={{ width: `${myHpPct}%` }} />
-            </div>
-            <div className="pk-bar-label-unskew-left">
-              <span className="pk-num-font" style={{ color: '#ffe047' }}>
-                {myFighter.hp}/{myFighter.maxHp}
-                {myFighter.shield > 0 ? ` (+${myFighter.shield})` : ''}
-              </span>
-              <span>{myFighter.name}</span>
-            </div>
-          </div>
-
-          <div className="pk-subbars-row">
-            <div className="pk-subbar-track" title="Mana dùng Thẻ Tiến Hóa (120) / Chưởng (160) / Skill">
+        {/* CENTERED 3-TIER CHAMFERED METALLIC HUD CLUSTER */}
+        <div className="pk-pg-hud-cluster">
+          {/* LEFT WING: PLAYER HP (RED) / RAGE (GOLD) / MANA (CYAN) */}
+          <div className="pk-pg-wing pk-pg-wing-left">
+            <div className="pk-pg-hp-shell">
               <div className="pk-pg-hp-inner">
-                <div className="pk-subbar-mana" style={{ width: `${myManaPct}%` }} />
+                <div className="pk-pg-hp-fill" style={{ width: `${myHpPct}%` }} />
+                <div className="pk-pg-hp-text pk-num-font">
+                  <span>
+                    {myFighter.hp.toLocaleString('vi-VN')}/{myFighter.maxHp.toLocaleString('vi-VN')}
+                  </span>
+                  {myFighter.shield > 0 && (
+                    <span style={{ color: '#bae6fd', fontSize: 11 }}>
+                      (+{myFighter.shield.toLocaleString('vi-VN')})
+                    </span>
+                  )}
+                </div>
               </div>
-              <span
-                className="pk-num-font"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#7ef3ff',
-                  textShadow: '0 1px 2px #000',
-                }}
-              >
-                Mana: {myFighter.mana}/{myFighter.maxMana}
-              </span>
             </div>
 
-            <div className="pk-subbar-rage-track" title="Nộ (Max 250 — ≥100 & ≥200 tăng sát thương Kiếm)">
+            <div className="pk-pg-rage-shell" title="Nộ (Tối đa 250 — ≥100 & ≥200 tăng sát thương Kiếm)">
               <div className="pk-pg-hp-inner">
                 <div className="pk-subbar-rage" style={{ width: `${myRagePct}%` }} />
-                <div style={{ position: 'absolute', left: '40%', top: 0, bottom: 0, width: 1.5, background: 'rgba(255,255,255,0.55)' }} />
-                <div style={{ position: 'absolute', left: '80%', top: 0, bottom: 0, width: 1.5, background: 'rgba(255,255,255,0.55)' }} />
+                <div style={{ position: 'absolute', left: '40%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.45)' }} />
+                <div style={{ position: 'absolute', left: '80%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.45)' }} />
+                <span className="pk-pg-sub-text pk-num-font">
+                  {myFighter.rage}/{myFighter.maxRage}
+                </span>
               </div>
+            </div>
+
+            <div className="pk-pg-mana-shell" title="Năng lượng dùng Thẻ Tiến Hóa (120) / Chưởng (160) / Tuyệt Kỹ">
+              <div className="pk-pg-hp-inner">
+                <div className="pk-subbar-mana" style={{ width: `${myManaPct}%` }} />
+                <span className="pk-pg-sub-text pk-num-font" style={{ color: '#e0f2fe' }}>
+                  {myFighter.mana}/{myFighter.maxMana}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* CENTER METALLIC COUNTDOWN MEDAL */}
+          <div className="pk-turn-orb">
+            <div className={`pk-pg-timer-medal ${!isYourTurn && !battleState.winner ? 'enemy' : ''}`}>
               <span
                 className="pk-num-font"
                 style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#fff275',
-                  textShadow: '0 1px 2px #000',
+                  fontSize: overlayPaused ? 12 : 25,
+                  lineHeight: 1,
+                  color: overlayPaused
+                    ? '#e0f2fe'
+                    : turnSecondsLeft !== null && turnSecondsLeft <= 5
+                      ? '#fef08a'
+                      : '#ffedd5',
+                  textShadow: '0 2px 0 #7c2d12, 0 3px 6px rgba(0,0,0,0.9)',
                 }}
               >
-                Nộ: {myFighter.rage}/{myFighter.maxRage}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* CENTER POKIGUARD SHIELD TURN BADGE */}
-        <div className="pk-turn-orb">
-          <span
-            className="pk-num-font"
-            style={{
-              fontSize: overlayPaused ? 15 : 24,
-              lineHeight: 1,
-              color: overlayPaused
-                ? '#7ef3ff'
-                : turnSecondsLeft !== null && turnSecondsLeft <= 5
-                  ? '#fca5a5'
-                  : '#ffd84d',
-              textShadow: '0 2px 0 #451a03, 0 3px 6px #000',
-            }}
-          >
-            {overlayPaused
-              ? '⏸ TẠM DỪNG'
-              : turnSecondsLeft !== null
-                ? `${turnSecondsLeft}`
-                : battleState.turnNumber}
-          </span>
-          <span style={{ fontSize: 9.5, fontWeight: 900, color: isYourTurn ? '#86efac' : '#fda4af', textShadow: '0 1px 2px #000' }}>
-            {battleState.winner
-              ? 'KẾT THÚC'
-              : overlayPaused
-                ? 'ĐANG CHỌN CHIÊU'
-                : isYourTurn
-                  ? `LƯỢT ${battleState.turnNumber} • BẠN`
-                  : `LƯỢT ${battleState.turnNumber} • ĐỊCH`}
-          </span>
-        </div>
-
-        {/* RIGHT WING: ENEMY HP / RAGE / MANA */}
-        <div className="pk-hud-wing pk-hud-wing-right">
-          <div className="pk-pg-hp-track">
-            <div className="pk-pg-hp-inner">
-              <div
-                className="pk-pg-enemy-hp-fill"
-                style={{ width: `${enemyHpPct}%`, marginLeft: 'auto' }}
-              />
-            </div>
-            <div className="pk-bar-label-unskew-right">
-              <span>{enemyFighter.name}</span>
-              <span className="pk-num-font" style={{ color: '#ffe047' }}>
-                {enemyFighter.shield > 0 ? `(+${enemyFighter.shield}) ` : ''}
-                {enemyFighter.hp}/{enemyFighter.maxHp}
+                {overlayPaused
+                  ? '⏸'
+                  : turnSecondsLeft !== null
+                    ? `${turnSecondsLeft}`
+                    : battleState.turnNumber}
               </span>
             </div>
           </div>
 
-          <div className="pk-subbars-row" style={{ justifyContent: 'flex-end' }}>
-            <div className="pk-subbar-rage-track">
+          {/* RIGHT WING: ENEMY HP (GREEN) / RAGE (GOLD) / MANA (CYAN) */}
+          <div className="pk-pg-wing pk-pg-wing-right">
+            <div className="pk-pg-hp-shell">
+              <div className="pk-pg-hp-inner">
+                <div
+                  className="pk-pg-enemy-hp-fill"
+                  style={{ width: `${enemyHpPct}%`, marginLeft: 'auto' }}
+                />
+                <div className="pk-pg-hp-text pk-num-font">
+                  {enemyFighter.shield > 0 && (
+                    <span style={{ color: '#bae6fd', fontSize: 11 }}>
+                      (+{enemyFighter.shield.toLocaleString('vi-VN')})
+                    </span>
+                  )}
+                  <span>
+                    {enemyFighter.hp.toLocaleString('vi-VN')}/{enemyFighter.maxHp.toLocaleString('vi-VN')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pk-pg-rage-shell">
               <div className="pk-pg-hp-inner">
                 <div
                   className="pk-subbar-rage"
                   style={{ width: `${enemyRagePct}%`, marginLeft: 'auto' }}
                 />
+                <span className="pk-pg-sub-text pk-num-font">
+                  {enemyFighter.rage}/{enemyFighter.maxRage}
+                </span>
               </div>
-              <span
-                className="pk-num-font"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#fff275',
-                  textShadow: '0 1px 2px #000',
-                }}
-              >
-                Nộ: {enemyFighter.rage}/{enemyFighter.maxRage}
-              </span>
             </div>
 
-            <div className="pk-subbar-track">
+            <div className="pk-pg-mana-shell">
               <div className="pk-pg-hp-inner">
                 <div
                   className="pk-subbar-mana"
                   style={{ width: `${enemyManaPct}%`, marginLeft: 'auto' }}
                 />
+                <span className="pk-pg-sub-text pk-num-font" style={{ color: '#e0f2fe' }}>
+                  {enemyFighter.mana}/{enemyFighter.maxMana}
+                </span>
               </div>
-              <span
-                className="pk-num-font"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  color: '#7ef3ff',
-                  textShadow: '0 1px 2px #000',
-                }}
-              >
-                Mana: {enemyFighter.mana}/{enemyFighter.maxMana}
-              </span>
             </div>
           </div>
         </div>
-
-        {/* TOP-RIGHT SOUND/INFO BADGE SPACE */}
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <img
-            src={ELEMENT_META[enemyFighter.element].iconPath}
-            alt={enemyFighter.element}
-            style={{ width: 32, height: 32, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px #000)' }}
-          />
-        </div>
       </div>
 
-      {/* ==================== FULL-ARENA PUKIWO BATTLEFIELD ==================== */}
+      {/* ==================== FULL-ARENA POKIGUARD BATTLEFIELD ==================== */}
       <div className="pk-battle-main">
-        {/* PLAYER SIDE CARD */}
-        <div className="pk-side-card pk-side-card-left">
+        {/* FAR-LEFT MINI-PORTRAIT CARD (frameAvatar.png) */}
+        <div className="pk-pg-mini-avatar pk-pg-mini-avatar-left" title={`${playerName} — ${myFighter.name}`}>
           <img
             src={`/assets/pokiguard/avatars/${playerAvatarId}.png`}
             alt={playerName}
             style={{
-              width: 46,
-              height: 54,
+              width: 66,
+              height: 60,
               objectFit: 'cover',
               objectPosition: 'top center',
-              borderRadius: 8,
-              border: '1.5px solid #fbbf24',
-              background: 'rgba(2, 6, 23, 0.5)',
-              flexShrink: 0,
+              borderRadius: 6,
+              border: '1.5px solid #fde047',
+              background: 'rgba(2, 6, 23, 0.75)',
             }}
           />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                fontWeight: 900,
-                fontSize: 12,
-                color: '#fef08a',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {playerName}
-            </div>
-            <div style={{ fontSize: 10, color: '#93c5fd', fontWeight: 700 }}>
-              Lv.{myFighter.level} • Công {myFighter.attack}
-            </div>
-            {renderStatusChips(myFighter)}
+          <div className="pk-pg-mini-bar">
+            <div style={{ width: `${myHpPct}%`, height: '100%', background: '#ef4444' }} />
           </div>
-          {isYourTurn && (
-            <img
-              src="/assets/pokiguard/sprites/turn.png"
-              alt="Lượt của bạn"
-              style={{
-                position: 'absolute',
-                right: -18,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                width: 28,
-                height: 36,
-                objectFit: 'contain',
-              }}
-            />
-          )}
+          <div style={{ fontSize: 8.5, fontWeight: 900, color: '#fef08a', lineHeight: 1 }}>
+            {myFighter.hp}/{myFighter.maxHp}
+          </div>
+          <div className="pk-pg-mini-bar">
+            <div style={{ width: `${myManaPct}%`, height: '100%', background: '#38bdf8' }} />
+          </div>
+          <div className="pk-pg-mini-bar">
+            <div style={{ width: `${myRagePct}%`, height: '100%', background: '#f59e0b' }} />
+          </div>
         </div>
 
-        {/* ENEMY SIDE CARD */}
-        <div className="pk-side-card pk-side-card-right">
+        {/* FAR-RIGHT MINI-PORTRAIT CARD (frameAvatar.png) */}
+        <div className="pk-pg-mini-avatar pk-pg-mini-avatar-right" title={`${opponentName} — ${enemyFighter.name}`}>
           <img
             src={
               isBossStage
@@ -741,59 +665,110 @@ export function BattleScreen({
             }
             alt={opponentName}
             style={{
-              width: 48,
-              height: 54,
+              width: 66,
+              height: 60,
               objectFit: isBossStage ? 'contain' : 'cover',
               objectPosition: 'top center',
-              borderRadius: 8,
+              borderRadius: 6,
               border: '1.5px solid #f87171',
               background: 'radial-gradient(circle, rgba(127,29,29,0.75), rgba(2,6,23,0.9))',
-              flexShrink: 0,
             }}
           />
-          <div style={{ minWidth: 0, flex: 1, textAlign: 'right' }}>
+          <div className="pk-pg-mini-bar">
+            <div style={{ width: `${enemyHpPct}%`, height: '100%', background: '#22c55e' }} />
+          </div>
+          <div style={{ fontSize: 8.5, fontWeight: 900, color: '#fef08a', lineHeight: 1 }}>
+            {enemyFighter.hp}/{enemyFighter.maxHp}
+          </div>
+          <div className="pk-pg-mini-bar">
+            <div style={{ width: `${enemyManaPct}%`, height: '100%', background: '#38bdf8' }} />
+          </div>
+          <div className="pk-pg-mini-bar">
+            <div style={{ width: `${enemyRagePct}%`, height: '100%', background: '#f59e0b' }} />
+          </div>
+        </div>
+
+        {/* ABOVE-PET POKIGUARD POWER ORB + +5% HỢP THỂ + 7-GEM BUFF PILL */}
+        <div className="pk-pg-buff-cluster">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div
               style={{
-                fontWeight: 900,
-                fontSize: 11.5,
-                color: '#fecdd3',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                width: 24,
+                height: 24,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle at 35% 30%, #e0f2fe, #0284c7 65%, #1e3a8a)',
+                border: '2px solid #bae6fd',
+                boxShadow: '0 0 10px rgba(56, 189, 248, 0.9)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                color: '#fff',
               }}
-              title={opponentName}
             >
-              {enemyFighter.name}
+              ⚡
             </div>
-            <div style={{ fontSize: 10, color: '#fda4af', fontWeight: 700 }}>
-              Lv.{enemyFighter.level} • Công {enemyFighter.attack}
-            </div>
+            <span
+              className="pk-num-font"
+              style={{ fontSize: 15, color: '#f8fafc', textShadow: '0 2px 4px #000' }}
+            >
+              {myCombatPower.toLocaleString('vi-VN')}
+            </span>
+            {myFighter.fusionPetId && (
+              <span
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 900,
+                  color: '#fde047',
+                  textShadow: '0 2px 3px #000, 0 0 10px rgba(250, 204, 21, 0.7)',
+                }}
+              >
+                +5% HỢP THỂ
+              </span>
+            )}
+          </div>
+
+          <div className="pk-pg-gem-buffs">
+            {gemBuffBadges.map((b) => (
+              <span key={b.gem} className="pk-pg-gem-buff-item">
+                <img
+                  src={GEM_META[b.gem].spritePath}
+                  alt={b.gem}
+                  style={{ width: 14, height: 14, objectFit: 'contain' }}
+                />
+                +{b.pct}%
+              </span>
+            ))}
+          </div>
+
+          {renderStatusChips(myFighter)}
+        </div>
+
+        {/* ENEMY STATUS CHIPS UNDER TOP-RIGHT */}
+        {enemyFighter.statuses.length > 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              right: 104,
+              top: 20,
+              zIndex: 18,
+              display: 'flex',
+              justifyContent: 'flex-end',
+              maxWidth: 230,
+              pointerEvents: 'none',
+            }}
+          >
             {renderStatusChips(enemyFighter)}
           </div>
-          {!isYourTurn && !battleState.winner && (
-            <img
-              src="/assets/pokiguard/sprites/turn.png"
-              alt="Lượt địch"
-              style={{
-                position: 'absolute',
-                left: -18,
-                top: '50%',
-                transform: 'translateY(-50%) scaleX(-1)',
-                width: 28,
-                height: 36,
-                objectFit: 'contain',
-              }}
-            />
-          )}
-        </div>
+        )}
 
         {/* CO-OP 3V1 TEAMMATE MINI-CARDS WHEN MERCENARIES HIRED */}
         {(mercenaryCount ?? myFighter.allyCount ?? 0) > 0 && (
           <div
             style={{
               position: 'absolute',
-              left: 12,
-              top: 86,
+              left: 10,
+              top: 144,
               zIndex: 16,
               display: 'flex',
               flexDirection: 'column',
@@ -805,10 +780,10 @@ export function BattleScreen({
               <img
                 src="/assets/pokiguard/pets/1440.png"
                 alt="Kiếm Thánh"
-                style={{ width: 24, height: 24, objectFit: 'contain', borderRadius: '50%', background: '#0b1b44' }}
+                style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: '50%', background: '#0b1b44' }}
               />
-              <span style={{ fontSize: 10, fontWeight: 900, color: '#fef08a' }}>
-                Kiếm Thánh <span style={{ color: '#7dd3fc' }}>+15% Công/HP</span>
+              <span style={{ fontSize: 9.5, fontWeight: 900, color: '#fef08a' }}>
+                Kiếm Thánh <span style={{ color: '#7dd3fc' }}>+15%</span>
               </span>
             </div>
             {(mercenaryCount ?? myFighter.allyCount ?? 0) >= 2 && (
@@ -816,10 +791,10 @@ export function BattleScreen({
                 <img
                   src="/assets/pokiguard/pets/1498.png"
                   alt="Hỏa Vương"
-                  style={{ width: 24, height: 24, objectFit: 'contain', borderRadius: '50%', background: '#2a0f08' }}
+                  style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: '50%', background: '#2a0f08' }}
                 />
-                <span style={{ fontSize: 10, fontWeight: 900, color: '#fed7aa' }}>
-                  Hỏa Vương <span style={{ color: '#fde047' }}>+15% Phép/+45M</span>
+                <span style={{ fontSize: 9.5, fontWeight: 900, color: '#fed7aa' }}>
+                  Hỏa Vương <span style={{ color: '#fde047' }}>+15%</span>
                 </span>
               </div>
             )}
@@ -832,7 +807,7 @@ export function BattleScreen({
             className="pk-emoji-bubble"
             style={{
               left: '17%',
-              top: 96,
+              top: 112,
               backgroundImage: "url('/assets/pokiguard/sprites/bubble_l.png')",
               paddingBottom: 6,
             }}
@@ -849,7 +824,7 @@ export function BattleScreen({
             className="pk-emoji-bubble"
             style={{
               left: '77%',
-              top: 96,
+              top: 112,
               backgroundImage: "url('/assets/pokiguard/sprites/bubble_r.png')",
               paddingBottom: 6,
             }}
@@ -862,44 +837,20 @@ export function BattleScreen({
           </div>
         )}
 
-        {/* PUKIWO MAGIC HEXAGRAM RUNE BEHIND ACTIVE TURN FIGHTER */}
-        {!battleState.winner && (
-          <svg
-            viewBox="0 0 200 200"
-            className="pk-magic-rune"
-            style={{
-              left: isYourTurn ? '16.5%' : '83.5%',
-            }}
-          >
-            <g
-              fill="none"
-              stroke={isYourTurn ? '#f472b6' : '#f87171'}
-              strokeWidth="2.5"
-              opacity="0.9"
-            >
-              <circle cx="100" cy="100" r="88" />
-              <circle cx="100" cy="100" r="76" strokeDasharray="8 6" />
-              <circle cx="100" cy="100" r="46" />
-              <polygon points="100,14 174,142 26,142" />
-              <polygon points="100,186 26,58 174,58" />
-            </g>
-          </svg>
-        )}
-
-        {/* PET HỘ VỆ (SUPPORT PET) MEDALLION CHUẨN POKIWAR 4.0 */}
+        {/* PET HỘ VỆ (SUPPORT PET) COMPACT MEDALLION */}
         {myFighter.guardPetSpriteId && (
           <div
             style={{
               position: 'absolute',
-              left: 14,
-              top: (mercenaryCount ?? myFighter.allyCount ?? 0) > 0 ? 156 : 86,
+              left: 104,
+              top: 108,
               zIndex: 17,
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              padding: '4px 9px 4px 5px',
+              gap: 5,
+              padding: '2px 8px 2px 4px',
               borderRadius: 999,
-              background: 'rgba(6, 20, 56, 0.92)',
+              background: 'rgba(6, 20, 56, 0.86)',
               border: '1.5px solid #fde047',
               boxShadow: '0 4px 12px rgba(0,0,0,0.75)',
               pointerEvents: 'none',
@@ -908,22 +859,86 @@ export function BattleScreen({
             <img
               src={`/assets/pokiguard/pets/${myFighter.guardPetSpriteId}.png`}
               alt={myFighter.guardPetName ?? 'Hộ Vệ'}
-              style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: '50%', background: '#0f172a' }}
+              style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: '50%', background: '#0f172a' }}
             />
-            <div style={{ lineHeight: 1.1 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 900, color: '#fde047' }}>
-                🛡️ Hộ Vệ: {myFighter.guardPetName}
-              </div>
-              <div style={{ fontSize: 8.5, fontWeight: 800, color: '#4ade80' }}>+16% HP/Công/Phép</div>
+            <span style={{ fontSize: 9.5, fontWeight: 900, color: '#fde047' }}>
+              🛡️ {myFighter.guardPetName} <span style={{ color: '#4ade80' }}>+16%</span>
+            </span>
+          </div>
+        )}
+
+        {/* FLOATING LEFT BLUE HEXAGON CHAT/EMOJI BUTTON (POKIGUARD STYLE) */}
+        <button
+          type="button"
+          className="pk-pg-hex-btn"
+          style={pendingQteSkill ? { opacity: 0, pointerEvents: 'none' } : undefined}
+          title="Biểu cảm trong trận"
+          onClick={() => setShowEmojiPicker((v) => !v)}
+        >
+          💬
+        </button>
+
+        {showEmojiPicker && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 76,
+              top: 170,
+              width: 236,
+              padding: '10px 10px 8px',
+              backgroundImage: "url('/assets/pokiguard/sprites/frame_emoji.png')",
+              backgroundSize: '100% 100%',
+              backgroundColor: 'rgba(6, 20, 56, 0.96)',
+              borderRadius: 12,
+              border: '2px solid #38bdf8',
+              boxShadow: '0 10px 28px rgba(0, 0, 0, 0.85)',
+              zIndex: 45,
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 900, color: '#fde047', marginBottom: 6, textAlign: 'center' }}>
+              BIỂU CẢM TRONG TRẬN
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {EMOJI_IDS.map((em) => (
+                <button
+                  key={em}
+                  type="button"
+                  className="pk-btn-blue"
+                  style={{ padding: 4, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+                  onClick={() => handleSendEmoji(em)}
+                >
+                  <img
+                    src={`/assets/pokiguard/sprites/${em}.png`}
+                    alt={em}
+                    style={{ width: 32, height: 32, objectFit: 'contain' }}
+                  />
+                </button>
+              ))}
             </div>
           </div>
         )}
+
+        {/* FLOATING RIGHT SPEED TOGGLE (>> x1 / x2) — CLEAN POKIGUARD RAIL */}
+        <div
+          className="pk-pg-right-tools"
+          style={pendingQteSkill ? { opacity: 0, pointerEvents: 'none' } : undefined}
+        >
+          <button
+            type="button"
+            className={`pk-pg-circle-tool ${battleSpeed === 2 ? 'active' : ''}`}
+            title={battleSpeed === 2 ? 'Đang tăng tốc x2 (nhấn để về x1)' : 'Bật tăng tốc đánh x2'}
+            onClick={onToggleSpeed}
+          >
+            <span style={{ fontSize: 10, opacity: 0.85 }}>»</span>
+            <span style={{ fontSize: 14 }}>x{battleSpeed}</span>
+          </button>
+        </div>
 
         {/* FULL ARENA PIXI MONSTER STAGE (PETS FACING ACROSS THE CENTER BOARD) */}
         <div className="pk-battle-stage-layer">
           <SpineStageCanvas
             width={1280}
-            height={492}
+            height={580}
             mode="DUEL"
             mySpriteId={myFighter.spriteId}
             enemySpriteId={enemyFighter.spriteId}
@@ -936,14 +951,15 @@ export function BattleScreen({
             defeatedSide={defeatedSide}
             actionCue={actionCue}
             animCommand={animCommand}
-            scaleMultiplier={1.06}
+            scaleMultiplier={1.08}
+            speedMultiplier={battleSpeed}
           />
         </div>
 
         {/* RATING STARS (UP TO 6★) & REVIVAL HEARTS UNDER EACH PET */}
-        {[
-          { left: '16.5%', stars: myFighter.stars, tier: myFighter.tier, revives: myFighter.reviveCharges ?? 0 },
-          { left: '83.5%', stars: enemyFighter.stars, tier: enemyFighter.tier, revives: enemyFighter.reviveCharges ?? 0 },
+        {!pendingQteSkill && [
+          { left: '17.5%', stars: myFighter.stars, tier: myFighter.tier, revives: myFighter.reviveCharges ?? 0 },
+          { left: '82.5%', stars: enemyFighter.stars, tier: enemyFighter.tier, revives: enemyFighter.reviveCharges ?? 0 },
         ].map((rInfo, sideIdx) => {
           const lit =
             rInfo.stars && rInfo.stars >= 1
@@ -963,7 +979,7 @@ export function BattleScreen({
               style={{
                 position: 'absolute',
                 left: rInfo.left,
-                top: 394,
+                top: 470,
                 transform: 'translateX(-50%)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -984,8 +1000,8 @@ export function BattleScreen({
                     }
                     alt="*"
                     style={{
-                      width: 18,
-                      height: 18,
+                      width: 16,
+                      height: 16,
                       objectFit: 'contain',
                       filter: i === 5 && lit >= 6 ? 'hue-rotate(250deg) saturate(1.9)' : undefined,
                     }}
@@ -995,11 +1011,11 @@ export function BattleScreen({
               {rInfo.revives > 0 && (
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 900,
                     color: '#fb7185',
                     textShadow: '0 1px 3px #000',
-                    background: 'rgba(15, 23, 42, 0.85)',
+                    background: 'rgba(15, 23, 42, 0.88)',
                     padding: '1px 7px',
                     borderRadius: 999,
                     border: '1px solid #f43f5e',
@@ -1012,125 +1028,63 @@ export function BattleScreen({
           );
         })}
 
-        {/* FLOATING DAMAGE / HEAL NUMBERS ABOVE EACH PET */}
-        {popups.map((p, idx) => (
-          <div
-            key={p.id}
-            className="pk-floating-dmg"
-            style={{
-              left: p.side === yourSide ? '16.5%' : '83.5%',
-              top: `${88 + (idx % 4) * 32}px`,
-              transform: 'translateX(-50%)',
-              color: p.color,
-            }}
-          >
-            {p.text}
-          </div>
-        ))}
-
-        {/* CENTERED NON-OCCLUDING DRAWER FOR 6 NGỌC & CHIÊU ĐỊCH */}
-        {showInfoDrawer && (
-          <div
-            className="pk-stone-panel"
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '42%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 48,
-              width: 344,
-              padding: '11px 12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              boxShadow: '0 16px 38px rgba(0, 0, 0, 0.94)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, fontWeight: 900, color: '#fde047' }}>
-                6 NGỌC POKIWAR (HỆ SỐ x1–x4)
-              </span>
-              <button
-                type="button"
-                className="pk-btn-blue"
-                style={{ padding: '2px 8px', fontSize: 10 }}
-                onClick={() => setShowInfoDrawer(false)}
+        {/* FLOATING DAMAGE / HEAL NUMBERS & POKIGUARD COMIC STARBURST DAMAGE */}
+        {popups.map((p, idx) =>
+          p.isBurst ? (
+            <div
+              key={p.id}
+              className="pk-dmg-starburst"
+              style={{
+                left: p.side === yourSide ? '18%' : '82%',
+                top: `${175 + (idx % 3) * 28}px`,
+              }}
+            >
+              <svg
+                viewBox="0 0 220 150"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.85))',
+                }}
               >
-                Đóng
-              </button>
+                <polygon
+                  points="110,4 134,34 176,12 166,52 214,56 178,86 208,124 158,116 146,146 112,122 76,146 66,116 14,124 44,86 8,56 56,52 46,12 88,34"
+                  fill="#ef4444"
+                  stroke="#fde047"
+                  strokeWidth="6"
+                  strokeLinejoin="round"
+                />
+                <polygon
+                  points="110,18 130,44 162,28 154,58 192,62 162,84 184,112 146,106 136,130 110,110 84,130 74,106 36,112 58,84 28,62 66,58 58,28 90,44"
+                  fill="#f97316"
+                />
+              </svg>
+              <span className="pk-dmg-starburst-num pk-num-font" style={{ color: p.color }}>
+                {p.text}
+              </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 5 }}>
-              {GEM_TYPES.map((gType) => (
-                <div
-                  key={gType}
-                  title={GEM_META[gType].effectHint}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    padding: '4px 6px',
-                    borderRadius: 6,
-                    background: 'rgba(6, 18, 46, 0.88)',
-                    border: '1px solid rgba(148, 163, 184, 0.25)',
-                  }}
-                >
-                  <img
-                    src={GEM_META[gType].spritePath}
-                    alt={GEM_META[gType].label}
-                    style={{ width: 18, height: 18, objectFit: 'contain' }}
-                  />
-                  <span style={{ fontSize: 10, fontWeight: 800, color: GEM_META[gType].color }}>
-                    {GEM_META[gType].label}
-                  </span>
-                </div>
-              ))}
+          ) : (
+            <div
+              key={p.id}
+              className="pk-floating-dmg"
+              style={{
+                left: p.side === yourSide ? '18%' : '82%',
+                top: `${210 + (idx % 4) * 32}px`,
+                color: p.color,
+              }}
+            >
+              {p.text}
             </div>
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 6 }}>
-              <div style={{ fontSize: 11, fontWeight: 900, color: '#fda4af', marginBottom: 4 }}>
-                CHIÊU THỨC ĐỐI THỦ
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {enemyFighter.skills.length === 0 ? (
-                  <div style={{ fontSize: 10.5, color: '#94a3b8', padding: '4px 6px' }}>
-                    Pet Thường — chiến đấu bằng 6 Ngọc Match-3 &amp; Thẻ Chưởng.
-                  </div>
-                ) : (
-                  enemyFighter.skills.map((sk) => (
-                    <div
-                      key={sk.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 6,
-                        padding: '4px 7px',
-                        borderRadius: 6,
-                        background: 'rgba(69, 10, 10, 0.56)',
-                        border: '1px solid rgba(248, 113, 113, 0.35)',
-                      }}
-                    >
-                      <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fecdd3' }}>★ {sk.name}</span>
-                      <span style={{ fontSize: 9.5, color: '#fca5a5' }}>{sk.rageCost}N/{sk.manaCost ?? 0}M</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+          ),
         )}
 
-        {/* CENTERED 8x8 MATCH-3 BOARD + HORIZONTAL PUKIWO CARD DOCK UNDERNEATH */}
+        {/* CENTERED 8x8 MATCH-3 BOARD + FULL-ART POKIGUARD CARD DOCK UNDERNEATH */}
         <div className="pk-battle-center">
           {/* BOARD WRAPPER */}
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <div
-              className="pk-pow-badge"
-              title={`Nộ hiện tại: ${myFighter.rage}/${myFighter.maxRage} • Mana: ${myFighter.mana}/${myFighter.maxMana}`}
-            >
-              <span>POW</span>
-            </div>
-
-            <div className={`pk-board-shell ${boardFaded ? 'faded' : ''}`}>
+            <div className={`pk-board-shell ${hideBoardNow ? 'faded' : ''}`}>
               <BoardCanvas
                 board={displayBoard ?? battleState.board}
                 events={lastEvents}
@@ -1262,25 +1216,27 @@ export function BattleScreen({
             })()}
 
             {/* COLLECTED GEMS TRAY (KHAY NGỌC ĐÃ ĂN CHUẨN POKIWAR GỐC) */}
-            {collectedGems.length > 0 && (
+            {collectedGems.length > 0 && !pendingQteSkill && (
               <div
                 style={{
                   position: 'absolute',
-                  top: boardFaded ? '30%' : -26,
+                  top: boardFaded ? 22 : -18,
                   left: '50%',
                   transform: 'translate(-50%, -50%)',
                   zIndex: 44,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 14px',
-                  borderRadius: 999,
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  maxWidth: 416,
+                  gap: 5,
+                  padding: '4px 10px',
+                  borderRadius: 16,
                   background: 'linear-gradient(180deg, rgba(15, 34, 78, 0.96), rgba(6, 15, 40, 0.96))',
                   border: '2px solid #fde047',
                   boxShadow: '0 8px 26px rgba(0, 0, 0, 0.85), 0 0 18px rgba(250, 204, 21, 0.55)',
                   pointerEvents: 'none',
                   transition: 'top 0.22s ease',
-                  whiteSpace: 'nowrap',
                 }}
               >
                 <span style={{ fontSize: 10.5, fontWeight: 900, color: '#93c5fd', letterSpacing: 0.4 }}>
@@ -1328,13 +1284,13 @@ export function BattleScreen({
               </div>
             )}
 
-            {/* MATCHED GEM xN / SKILL CARD CALLOUT OVER FADED BOARD */}
-            {parsedCallout && (
+            {/* MATCHED GEM xN / SKILL CARD CALLOUT OVER HIDDEN BOARD */}
+            {parsedCallout && !pendingQteSkill && (
               <div
                 style={{
                   position: 'absolute',
                   left: '50%',
-                  top: '48%',
+                  top: '50%',
                   transform: 'translate(-50%, -50%)',
                   zIndex: 35,
                   pointerEvents: 'none',
@@ -1342,7 +1298,8 @@ export function BattleScreen({
                   flexDirection: 'column',
                   alignItems: 'center',
                   gap: 6,
-                  padding: '12px 22px',
+                  maxWidth: 400,
+                  padding: '12px 18px',
                   borderRadius: 18,
                   background: 'radial-gradient(circle, rgba(14, 42, 98, 0.94), rgba(5, 14, 38, 0.96))',
                   border: '2.5px solid #fde047',
@@ -1387,11 +1344,12 @@ export function BattleScreen({
 
                 <div
                   style={{
-                    fontSize: 15,
+                    fontSize: 13.5,
                     fontWeight: 900,
                     color: '#fef08a',
                     textShadow: '0 2px 4px #000',
-                    whiteSpace: 'nowrap',
+                    textAlign: 'center',
+                    lineHeight: 1.25,
                   }}
                 >
                   {parsedCallout.text}
@@ -1399,171 +1357,170 @@ export function BattleScreen({
               </div>
             )}
 
-            {/* BRIEF YOUR_TURN SPLASH BANNER */}
-            {turnSplashKey > 0 && isYourTurn && !boardFaded && !parsedCallout && !pendingQteSkill && !pendingBurnSkill && (
-              <img
-                key={turnSplashKey}
-                src="/assets/pokiguard/sprites/your_turn.png"
-                alt="Lượt của bạn"
-                className="pk-your-turn-splash"
-                style={{ width: 220, objectFit: 'contain' }}
-              />
+            {/* WINGED POKIGUARD "LƯỢT CỦA BẠN" BANNER */}
+            {turnSplashKey > 0 && isYourTurn && !hideBoardNow && !parsedCallout && !pendingQteSkill && !pendingBurnSkill && (
+              <div key={turnSplashKey} className="pk-pg-turn-banner">
+                LƯỢT CỦA BẠN
+              </div>
             )}
           </div>
 
-          {/* CENTERED HORIZONTAL POKIGUARD CARD DOCK (HÓA THẦN | CHƯỞNG | 3 HỖ TRỢ | 3 SKILL PET) */}
-          <div className="pk-card-dock">
-            {/* Thẻ Hóa Thần (Turn 2+, 120 Mana, Free Action, giữ nguyên ngoại hình Pet độc lập) */}
+          {/* FULL-ART POKIGUARD CARD DOCK DIRECTLY UNDERNEATH THE 432PX BOARD */}
+          <div className="pk-card-dock" style={pendingQteSkill ? { opacity: 0, pointerEvents: 'none' } : undefined}>
+            {/* 1. Pet Special Skill Card(s) — Full-Art PokiGuard Card with Mana Top / Rage Bottom / Gem Counter */}
+            {myFighter.skills.map((sk) => {
+              const cd = myFighter.cooldowns[sk.id] ?? 0;
+              const manaReq = sk.manaCost ?? 0;
+              const gemProg = getSkillGemProgress(myFighter, sk);
+              const enoughRes = myFighter.rage >= sk.rageCost && myFighter.mana >= manaReq && gemProg.met;
+              const canCast = boardInteractive && cd === 0 && enoughRes;
+              const triggerTag = sk.needPerfection
+                ? 'QTE ▲▼◀▶'
+                : sk.gemRequirement
+                  ? `${sk.gemRequirement.gemType ? GEM_META[sk.gemRequirement.gemType].icon : '💎'}${Math.min(gemProg.current, gemProg.required)}/${gemProg.required}`
+                  : null;
+              const fullTooltip = `${sk.isSpecialCard ? '★ THẺ KỸ NĂNG ĐẶC BIỆT POKIWAR 4.0 ★\n' : ''}${sk.name} (${sk.rageCost} Nộ / ${manaReq} Mana)${sk.gemRequirement ? `\n• Điều kiện ngọc: ${gemProg.label} (${gemProg.current}/${gemProg.required})` : ''}${sk.needPerfection ? '\n• Kích hoạt: Audition QTE 4 phím ▲▼◀▶' : '\n• Kích hoạt: Tung trực tiếp (không cần QTE)'}\n${sk.description}${sk.specialPassiveNote ? `\n• Bị động: ${sk.specialPassiveNote}` : ''}`;
+              return (
+                <button
+                  key={sk.id}
+                  type="button"
+                  title={fullTooltip}
+                  className={`pk-pg-card special ${canCast ? 'ready' : ''}`}
+                  disabled={!canCast}
+                  onClick={() => handleSkillClick(sk)}
+                >
+                  <div className="pk-pg-card-img-wrap">
+                    <img
+                      src={sk.cardImage}
+                      alt={sk.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <div className="pk-pg-card-top-cost">
+                      <span>⚡{manaReq}</span>
+                      <span
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          background: sk.needPerfection
+                            ? 'linear-gradient(180deg, #f0abfc, #9333ea)'
+                            : 'linear-gradient(180deg, #fef08a, #ca8a04)',
+                          color: sk.needPerfection ? '#ffffff' : '#451a03',
+                          fontSize: 8.5,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 900,
+                        }}
+                      >
+                        {sk.needPerfection ? '★' : '1'}
+                      </span>
+                    </div>
+                    {triggerTag && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 20,
+                          left: 2,
+                          right: 2,
+                          padding: '1px 3px',
+                          borderRadius: 4,
+                          background: gemProg.met
+                            ? 'rgba(22, 101, 52, 0.92)'
+                            : 'rgba(15, 23, 42, 0.9)',
+                          border: `1px solid ${gemProg.met ? '#4ade80' : '#f59e0b'}`,
+                          color: gemProg.met ? '#bbf7d0' : '#fde047',
+                          fontSize: 8,
+                          fontWeight: 900,
+                          textAlign: 'center',
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {triggerTag}
+                      </div>
+                    )}
+                    <div className="pk-pg-card-bot-cost">
+                      <span>🔥{sk.rageCost}</span>
+                    </div>
+                    {cd > 0 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'rgba(2, 6, 23, 0.78)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 18,
+                          fontWeight: 900,
+                          color: '#fde047',
+                        }}
+                      >
+                        {cd}L
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+
+            {/* 2. Thẻ Hóa Thần (120 Mana, Turn 2+, Free Action, +5% badge inside top-right) */}
             <button
               type="button"
-              className={`pk-func-card ${canInBattleEvolve ? 'ready' : ''}`}
+              className={`pk-pg-card ${canInBattleEvolve ? 'ready' : ''}`}
               disabled={!canInBattleEvolve}
               onClick={onInBattleEvolve}
               title={
                 !evolveUnlocked
                   ? 'Thẻ Hóa Thần mở khóa từ Lượt 2 trở đi (Lượt đầu tiên phải đi trên bàn cờ)'
-                  : 'Hóa Thần trong trận: tốn 120 Mana, KHÔNG mất lượt (+70% HP, +200 Max Mana, +20% Công/Phép, giữ nguyên ngoại hình Pet)'
+                  : 'Hóa Thần trong trận: tốn 120 Mana, KHÔNG mất lượt (+70% HP, +200 Max Mana, +20% Công/Phép)'
               }
             >
-              <div
-                style={{
-                  position: 'relative',
-                  width: 60,
-                  height: 52,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <img src={evoPreviewImg} alt="Hóa Thần" style={{ width: 42, height: 42, objectFit: 'contain' }} />
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    fontSize: 7.8,
-                    fontWeight: 900,
-                    padding: '1px 4px',
-                    borderRadius: 999,
-                    background: myFighter.inBattleEvolved
-                      ? '#334155'
-                      : !evolveUnlocked
-                        ? '#991b1b'
-                        : '#b45309',
-                    border: '1px solid #fde047',
-                    color: '#fef08a',
-                  }}
+              <div className="pk-pg-card-img-wrap" style={{ background: 'radial-gradient(circle, #1e3a8a, #020617)' }}>
+                <img
+                  src={evoPreviewImg}
+                  alt="Hóa Thần"
+                  style={{ width: '92%', height: '80%', objectFit: 'contain' }}
+                />
+                <div className="pk-pg-card-top-cost">
+                  <span>{myFighter.inBattleEvolved ? '✓' : !evolveUnlocked ? 'L2+' : '⚡120'}</span>
+                  {!myFighter.inBattleEvolved && (
+                    <span style={{ color: '#fde047', fontSize: 8.5 }}>+5%</span>
+                  )}
+                </div>
+                <div
+                  className="pk-pg-card-bot-cost"
+                  style={{ background: 'linear-gradient(180deg, rgba(180,83,9,0.92), rgba(120,53,15,0.96))' }}
                 >
-                  {myFighter.inBattleEvolved ? 'XONG' : !evolveUnlocked ? 'L2+' : '120M'}
-                </span>
-              </div>
-              <div
-                style={{
-                  marginTop: 7,
-                  height: 20,
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 8.8,
-                  fontWeight: 900,
-                  color: '#ffffff',
-                  textShadow: '0 1px 2px #000',
-                }}
-              >
-                {myFighter.inBattleEvolved ? 'Đã Hóa' : 'Hóa Thần'}
-              </div>
-              <div
-                style={{
-                  marginTop: 'auto',
-                  marginBottom: 1,
-                  height: 15,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 8.2,
-                  fontWeight: 900,
-                  color: '#3f1802',
-                }}
-              >
-                {myFighter.inBattleEvolved ? '+70% HP' : 'Free Lượt'}
+                  <span>{myFighter.inBattleEvolved ? 'ĐÃ HÓA' : 'HÓA THẦN'}</span>
+                </div>
               </div>
             </button>
 
-            {/* Thẻ Chưởng (160 Mana) */}
+            {/* 3. Thẻ Chưởng Ngũ Hành (Full-Art PokiGuard card4.png — 160 Mana) */}
             <button
               type="button"
-              className={`pk-func-card ${canDefaultCast ? 'ready' : ''}`}
+              className={`pk-pg-card ${canDefaultCast ? 'ready' : ''}`}
               disabled={!canDefaultCast}
               onClick={onDefaultCast}
-              title="Thẻ Chưởng Mặc Định: tốn 160 Mana, bắn chưởng 2.15x Phép (Kết thúc lượt)"
+              title="Thẻ Chưởng Ngũ Hành: tốn 160 Mana, bắn chưởng 2.15x Phép (Kết thúc lượt)"
             >
-              <div
-                style={{
-                  position: 'relative',
-                  width: 60,
-                  height: 52,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
+              <div className="pk-pg-card-img-wrap">
                 <img
-                  src="/assets/pokiguard/cards/card1.png"
-                  alt="Thẻ Chưởng"
-                  style={{ width: 44, height: 44, borderRadius: 6, objectFit: 'cover', border: '1px solid #38bdf8' }}
+                  src="/assets/pokiguard/cards/card4.png"
+                  alt="Thẻ Chưởng 160M"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    right: 0,
-                    fontSize: 7.8,
-                    fontWeight: 900,
-                    padding: '1px 4px',
-                    borderRadius: 999,
-                    background: canDefaultCast ? '#0284c7' : '#334155',
-                    border: '1px solid #7dd3fc',
-                    color: '#fff',
-                  }}
+                <div
+                  className="pk-pg-card-bot-cost"
+                  style={{ background: 'linear-gradient(180deg, rgba(2,132,199,0.9), rgba(3,105,161,0.96))' }}
                 >
-                  160M
-                </span>
-              </div>
-              <div
-                style={{
-                  marginTop: 7,
-                  height: 20,
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 8.6,
-                  fontWeight: 900,
-                  color: '#ffffff',
-                  textShadow: '0 1px 2px #000',
-                }}
-              >
-                Thẻ Chưởng
-              </div>
-              <div
-                style={{
-                  marginTop: 'auto',
-                  marginBottom: 1,
-                  height: 15,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 8.2,
-                  fontWeight: 900,
-                  color: '#3f1802',
-                }}
-              >
-                2.15x Phép
+                  <span>CHƯỞNG</span>
+                </div>
               </div>
             </button>
 
-            {/* Thẻ Bài Hợp Thể (Pokiwar 4.0 Pet Hợp Thể Combined Strike — 1x/trận) */}
+            {/* 4. Thẻ Hợp Thể (if Fusion Pet equipped & allowed) */}
             {myFighter.fusionPetId && onFusionStrike && !battleState.restrictedRules && (() => {
               const canFusion =
                 boardInteractive &&
@@ -1573,86 +1530,35 @@ export function BattleScreen({
               return (
                 <button
                   type="button"
-                  className={`pk-func-card ${canFusion ? 'ready' : ''}`}
+                  className={`pk-pg-card ${canFusion ? 'ready' : ''}`}
                   disabled={!canFusion}
                   onClick={onFusionStrike}
-                  title={`Thẻ Bài Hợp Thể (${myFighter.fusionPetName}): tốn 50 Nộ + 60 Mana, tung Hợp Thể Liên Kích 1.95x + Vết Thương Sâu + Hồi Máu & Giáp (1 lần/trận)`}
+                  title={`Thẻ Hợp Thể (${myFighter.fusionPetName}): 50 Nộ + 60 Mana, Liên Kích 1.95x + Vết Thương Sâu + Hồi Máu & Giáp`}
                 >
                   <div
-                    style={{
-                      position: 'relative',
-                      width: 60,
-                      height: 52,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
+                    className="pk-pg-card-img-wrap"
+                    style={{ background: 'radial-gradient(circle, rgba(147,51,234,0.65), #0f172a)' }}
                   >
                     <img
                       src={getPetSpritePath(getPetById(myFighter.fusionPetId))}
-                      alt={myFighter.fusionPetName ?? 'Hợp Thể'}
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 6,
-                        objectFit: 'contain',
-                        background: 'radial-gradient(circle, rgba(168,85,247,0.45), rgba(15,23,42,0.9))',
-                        border: '1.5px solid #c084fc',
-                      }}
+                      alt="Hợp Thể"
+                      style={{ width: '90%', height: '78%', objectFit: 'contain' }}
                     />
-                    <span
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        right: 0,
-                        fontSize: 7.5,
-                        fontWeight: 900,
-                        padding: '1px 4px',
-                        borderRadius: 999,
-                        background: myFighter.fusionStrikeUsed ? '#334155' : canFusion ? '#9333ea' : '#475569',
-                        border: '1px solid #e9d5ff',
-                        color: '#fff',
-                      }}
+                    <div
+                      className="pk-pg-card-top-cost"
+                      style={{ background: 'linear-gradient(180deg, rgba(147,51,234,0.95), rgba(88,28,135,0.95))' }}
                     >
-                      {myFighter.fusionStrikeUsed ? 'XONG' : '50N'}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 7,
-                      height: 20,
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 8.6,
-                      fontWeight: 900,
-                      color: '#f5d0fe',
-                      textShadow: '0 1px 2px #000',
-                    }}
-                  >
-                    Hợp Thể
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 'auto',
-                      marginBottom: 1,
-                      height: 15,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 8,
-                      fontWeight: 900,
-                      color: '#3f1802',
-                    }}
-                  >
-                    {myFighter.fusionStrikeUsed ? 'Đã Dùng' : 'Liên Kích'}
+                      <span>{myFighter.fusionStrikeUsed ? 'XONG' : '🔥50'}</span>
+                    </div>
+                    <div className="pk-pg-card-bot-cost">
+                      <span>HỢP THỂ</span>
+                    </div>
                   </div>
                 </button>
               );
             })()}
 
-            {/* 3 Thẻ Hỗ Trợ Pokiwar (từ bộ thẻ người chơi trang bị, có Luyện Thẻ Lv.1..5) */}
+            {/* 5. 3 Thẻ Hỗ Trợ Full-Art PokiGuard (card1.png +100M, card2.png +50N, card3/6/8 +HP...) */}
             {(myFighter.equippedSupportCards && myFighter.equippedSupportCards.length > 0
               ? myFighter.equippedSupportCards
               : (['MANA_100', 'RAGE_50', 'HP_350'] as SupportCardId[])
@@ -1666,264 +1572,34 @@ export function BattleScreen({
                 <button
                   key={cId}
                   type="button"
-                  className="pk-support-card"
+                  className="pk-pg-card"
+                  style={{ width: 66, height: 94 }}
                   disabled={!usable}
                   onClick={() => onSupportCard(cId)}
                   title={`${card.name} Lv.${cLv} (${scaledLabel}): ${card.description} — Dùng 1 lần/trận, không mất lượt`}
                 >
-                  <div
-                    style={{
-                      position: 'relative',
-                      width: 50,
-                      height: 48,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
+                  <div className="pk-pg-card-img-wrap">
                     <img
                       src={card.image}
                       alt={card.name}
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 6,
-                        objectFit: 'cover',
-                        border: '1px solid #fbbf24',
-                      }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                     <span
                       style={{
                         position: 'absolute',
-                        top: -1,
-                        right: -2,
-                        fontSize: 7.2,
+                        top: 2,
+                        right: 2,
+                        fontSize: 8,
                         fontWeight: 900,
-                        padding: '0 3px',
+                        padding: '0 4px',
                         borderRadius: 999,
-                        background: used ? '#334155' : '#0369a1',
+                        background: used ? '#334155' : 'rgba(2, 6, 23, 0.85)',
                         border: '1px solid #38bdf8',
                         color: used ? '#94a3b8' : '#fef08a',
                       }}
                     >
-                      {used ? 'HẾT' : `Lv.${cLv}`}
+                      {used ? 'HẾT' : `Lv${cLv}`}
                     </span>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 6,
-                      height: 19,
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 8.1,
-                      fontWeight: 900,
-                      color: '#ffffff',
-                      textShadow: '0 1px 2px #000',
-                    }}
-                  >
-                    {scaledLabel}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 'auto',
-                      marginBottom: 1,
-                      height: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 7.8,
-                      fontWeight: 900,
-                      color: '#3f1802',
-                    }}
-                  >
-                    {used ? 'Đã dùng' : 'Hỗ Trợ'}
-                  </div>
-                </button>
-              );
-            })}
-
-            <div
-              style={{
-                width: 1.5,
-                height: 102,
-                alignSelf: 'center',
-                background: 'linear-gradient(180deg, transparent, rgba(250,204,21,0.65), transparent)',
-                margin: '0 2px',
-              }}
-            />
-
-            {/* 3 Pet Signature Skill Cards (including Pokiwar 4.0 Special Skill Card!) */}
-            {myFighter.skills.map((sk) => {
-              const cd = myFighter.cooldowns[sk.id] ?? 0;
-              const manaReq = sk.manaCost ?? 0;
-              const enoughRes = myFighter.rage >= sk.rageCost && myFighter.mana >= manaReq;
-              const canCast = boardInteractive && cd === 0 && enoughRes;
-              const badgeText =
-                sk.boardEffect === 'SEAL_REGION'
-                  ? 'KẾT ẤN'
-                  : sk.boardEffect === 'BURN_ROWS'
-                    ? `${sk.burnRowCount ?? 3} HÀNG`
-                    : sk.boardEffect === 'CROSS_EXPLODE'
-                      ? '2 CHỮ THẬP'
-                      : sk.boardEffect === 'BOMB_3X3'
-                        ? '3 BOM'
-                        : sk.boardEffect === 'CONSUME_GEMS'
-                          ? 'ĂN NGỌC'
-                          : sk.boardEffect === 'FATE_CARD'
-                            ? '3 LÁ BÀI'
-                            : sk.isSpecialCard && !sk.needPerfection
-                              ? 'NO-QTE'
-                              : sk.needPerfection
-                                ? 'QTE'
-                                : null;
-              const footerText =
-                sk.boardEffect === 'SEAL_REGION'
-                  ? 'Phong Ấn 5×5'
-                  : sk.boardEffect === 'BURN_ROWS'
-                    ? `Thiêu ${sk.burnRowCount ?? 3} Hàng`
-                    : sk.boardEffect === 'CROSS_EXPLODE'
-                      ? 'Nổ Chữ Thập'
-                      : sk.boardEffect === 'BOMB_3X3'
-                        ? 'Bom 3×3'
-                        : sk.boardEffect === 'CONSUME_GEMS'
-                          ? 'Hút Ngọc Bàn'
-                          : sk.boardEffect === 'FATE_CARD'
-                            ? 'Rút Thần Bài'
-                            : sk.powerRatio > 0
-                              ? `${sk.powerRatio}x Công`
-                              : 'Hỗ Trợ';
-              const fullTooltip = `${sk.isSpecialCard ? '★ THẺ KỸ NĂNG ĐẶC BIỆT POKIWAR 4.0 ★\n' : ''}${sk.name} (${sk.rageCost} Nộ / ${manaReq} Mana)\n${sk.description}${sk.specialPassiveNote ? `\n• Bị động: ${sk.specialPassiveNote}` : ''}`;
-              return (
-                <button
-                  key={sk.id}
-                  type="button"
-                  title={fullTooltip}
-                  className={`pk-skill-card ${canCast ? 'ready' : ''}`}
-                  style={
-                    sk.isSpecialCard
-                      ? {
-                          boxShadow: canCast
-                            ? '0 0 14px rgba(250, 204, 21, 0.9), inset 0 0 10px rgba(250, 204, 21, 0.4)'
-                            : '0 0 6px rgba(250, 204, 21, 0.45)',
-                          borderColor: '#fde047',
-                        }
-                      : undefined
-                  }
-                  disabled={!canCast}
-                  onClick={() => handleSkillClick(sk)}
-                >
-                  <div
-                    style={{
-                      position: 'relative',
-                      width: 66,
-                      height: 52,
-                      marginTop: 1,
-                      borderRadius: 5,
-                      overflow: 'hidden',
-                      border: sk.isSpecialCard ? '2px solid #fef08a' : '1.5px solid #fbbf24',
-                      background: '#051233',
-                    }}
-                  >
-                    <img
-                      src={sk.cardImage}
-                      alt={sk.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 2,
-                        right: 2,
-                        padding: '0 3px',
-                        borderRadius: 999,
-                        background: enoughRes ? '#ea580c' : 'rgba(15,23,42,0.88)',
-                        border: '1px solid #fde047',
-                        fontSize: 7.5,
-                        fontWeight: 900,
-                        color: '#fff',
-                      }}
-                    >
-                      {sk.rageCost > 0 ? `${sk.rageCost}N` : '0N'}
-                      {manaReq > 0 ? `/${manaReq}M` : ''}
-                    </div>
-                    {badgeText && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          bottom: 2,
-                          left: 2,
-                          padding: '0 3px',
-                          borderRadius: 3,
-                          background: sk.isSpecialCard ? '#dc2626' : sk.boardEffect === 'BURN_ROWS' ? '#f97316' : '#facc15',
-                          color: sk.isSpecialCard || sk.boardEffect === 'BURN_ROWS' ? '#fef08a' : '#451a03',
-                          border: sk.isSpecialCard ? '1px solid #fde047' : 'none',
-                          fontSize: 7,
-                          fontWeight: 900,
-                        }}
-                      >
-                        {badgeText}
-                      </div>
-                    )}
-
-                    {cd > 0 && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          background: 'rgba(2, 6, 23, 0.78)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 15,
-                          fontWeight: 900,
-                          color: '#fde047',
-                        }}
-                      >
-                        {cd}L
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 5,
-                      height: 21,
-                      width: '100%',
-                      padding: '0 2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 8.2,
-                      fontWeight: 900,
-                      color: sk.isSpecialCard ? '#fef08a' : '#ffffff',
-                      textAlign: 'center',
-                      lineHeight: 1.04,
-                      textShadow: '0 1px 2px #000',
-                    }}
-                  >
-                    {sk.name}
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 'auto',
-                      marginBottom: 2,
-                      height: 15,
-                      padding: '0 4px',
-                      borderRadius: 4,
-                      background: 'rgba(15, 23, 42, 0.78)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 8,
-                      fontWeight: 900,
-                      color: '#fef08a',
-                      textShadow: '0 1px 1px #000',
-                    }}
-                  >
-                    {footerText}
                   </div>
                 </button>
               );
@@ -1931,192 +1607,61 @@ export function BattleScreen({
           </div>
         </div>
 
-        {/* BOTTOM-LEFT WING: PET NAMEPLATE + MATCH CONTROLS */}
+        {/* BOTTOM-LEFT SLEEK POKIGUARD NAMEPLATE */}
         <div className="pk-corner-anchor-left">
-          <div className="pk-nameplate-left">
+          <div className="pk-pg-plate-name" title={`${playerName} • ${myFighter.name}`}>
+            {playerName} — {myFighter.name}
+          </div>
+          <div className="pk-pg-nameplate">
             <img
               src={ELEMENT_META[myFighter.element].iconPath}
               alt={myFighter.element}
-              style={{ width: 26, height: 26, objectFit: 'contain' }}
+              style={{ width: 26, height: 26, objectFit: 'contain', filter: 'drop-shadow(0 2px 4px #000)' }}
             />
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 13,
-                  color: '#fff',
-                  textShadow: '0 1px 2px #000',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {myFighter.name}
-              </div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: '#fef08a' }}>
-                Lv.{myFighter.level} ({myFighter.tier}) • Thủ {myFighter.defense}
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="pk-stone-panel"
-            style={{
-              width: '100%',
-              padding: '6px 8px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 5,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10 }}>
-              <span style={{ color: '#7dd3fc', fontWeight: 800 }}>{modeLabel}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#fde047', fontWeight: 800 }}>
-                  +{battleState.bonusGold[yourSide] ?? 0} Vàng
-                </span>
-                <button
-                  type="button"
-                  className="pk-btn-gold"
-                  style={{ padding: '1px 6px', fontSize: 11, lineHeight: 1.2 }}
-                  title="Gửi Biểu Cảm Pokiwar"
-                  onClick={() => setShowEmojiPicker((v) => !v)}
-                >
-                  😊
-                </button>
-              </div>
-            </div>
-            {showEmojiPicker && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  bottom: 132,
-                  width: 244,
-                  padding: '10px 10px 8px',
-                  backgroundImage: "url('/assets/pokiguard/sprites/frame_emoji.png')",
-                  backgroundSize: '100% 100%',
-                  backgroundColor: 'rgba(6, 20, 56, 0.96)',
-                  borderRadius: 12,
-                  border: '2px solid #38bdf8',
-                  boxShadow: '0 10px 28px rgba(0, 0, 0, 0.85)',
-                  zIndex: 45,
-                }}
-              >
-                <div style={{ fontSize: 10, fontWeight: 900, color: '#fde047', marginBottom: 6, textAlign: 'center' }}>
-                  BIỂU CẢM TRONG TRẬN
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                  {EMOJI_IDS.map((em) => (
-                    <button
-                      key={em}
-                      type="button"
-                      className="pk-btn-blue"
-                      style={{ padding: 4, display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-                      onClick={() => handleSendEmoji(em)}
-                    >
-                      <img
-                        src={`/assets/pokiguard/sprites/${em}.png`}
-                        alt={em}
-                        style={{ width: 32, height: 32, objectFit: 'contain' }}
-                      />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 5 }}>
-              <button
-                type="button"
-                className="pk-btn-blue"
-                style={{ flex: 1, padding: '5px 6px', fontSize: 11 }}
-                disabled={!boardInteractive}
-                onClick={onHint}
-              >
-                Gợi ý
-              </button>
-              <button
-                type="button"
-                className={myFighter.consecutivePasses >= 2 ? 'pk-btn-red' : 'pk-btn-blue'}
-                style={{ flex: 1.2, padding: '5px 6px', fontSize: 11 }}
-                disabled={!canPass}
-                title="Bỏ lượt (Tối đa 2 lần liên tiếp — Lần 3 sẽ thua trận!)"
-                onClick={onPassTurn}
-              >
-                {myFighter.consecutivePasses >= 2
-                  ? 'Cấm Bỏ!'
-                  : `Bỏ (${myFighter.consecutivePasses}/2)`}
-              </button>
-              <button
-                type="button"
-                className="pk-btn-red"
-                style={{ padding: '5px 9px', fontSize: 11 }}
-                onClick={onLeave}
-              >
-                Rời
-              </button>
-            </div>
+            <span className="pk-num-font" style={{ fontSize: 13.5, color: '#fde047' }}>
+              Lv.{myFighter.level}
+            </span>
+            <span className="pk-num-font" style={{ fontSize: 12, color: '#4ade80' }}>
+              +{myFighter.attack} Công
+            </span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#bae6fd', marginLeft: 'auto' }}>
+              Thủ {myFighter.defense}
+            </span>
           </div>
         </div>
 
-        {/* BOTTOM-RIGHT WING: COMPACT LOG + ENEMY NAMEPLATE */}
+        {/* BOTTOM-RIGHT SLEEK POKIGUARD NAMEPLATE */}
         <div className="pk-corner-anchor-right">
-          <div
-            className="pk-stone-panel"
-            style={{
-              width: '100%',
-              padding: '6px 8px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 5,
-            }}
-          >
-            <div
+          <div className="pk-pg-plate-name" style={{ textAlign: 'right' }} title={`${opponentName} • ${enemyFighter.name}`}>
+            {enemyFighter.name}
+          </div>
+          <div className="pk-pg-nameplate right">
+            <span
               style={{
                 fontSize: 10,
+                fontWeight: 800,
                 color: '#fef08a',
-                fontWeight: 700,
+                marginRight: 'auto',
+                minWidth: 0,
+                flex: 1,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
               title={recentLogs[0] ?? 'Sẵn sàng giao chiến'}
             >
-              {recentLogs[0] ? `• ${recentLogs[0]}` : '• Đi 1 lượt bàn cờ để mở Tiến Hóa'}
-            </div>
-            <button
-              type="button"
-              className="pk-btn-blue"
-              style={{ width: '100%', padding: '5px 8px', fontSize: 11 }}
-              onClick={() => setShowInfoDrawer((v) => !v)}
-            >
-              {showInfoDrawer ? 'Đóng Chiêu & Ngọc ▼' : '6 Ngọc & Chiêu Địch ▲'}
-            </button>
-          </div>
-
-          <div className="pk-nameplate-right">
-            <div style={{ minWidth: 0, textAlign: 'right' }}>
-              <div
-                style={{
-                  fontWeight: 900,
-                  fontSize: 13,
-                  color: '#3f1802',
-                  textShadow: '0 1px 0 rgba(255, 255, 255, 0.65)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {enemyFighter.name}
-              </div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: '#7c2d12' }}>
-                Lv.{enemyFighter.level} ({enemyFighter.tier}) • Thủ {enemyFighter.defense}
-              </div>
-            </div>
+              {recentLogs[0] ?? `Thủ ${enemyFighter.defense}`}
+            </span>
+            <span className="pk-num-font" style={{ fontSize: 13.5, color: '#fde047' }}>
+              Lv.{enemyFighter.level}
+            </span>
+            <span className="pk-num-font" style={{ fontSize: 11.5, color: '#fca5a5' }}>
+              {isBossStage ? 'BOSS' : enemyFighter.tier}
+            </span>
             <img
               src={ELEMENT_META[enemyFighter.element].iconPath}
               alt={enemyFighter.element}
-              style={{ width: 26, height: 26, objectFit: 'contain' }}
+              style={{ width: 26, height: 26, objectFit: 'contain', filter: 'drop-shadow(0 2px 4px #000)' }}
             />
           </div>
         </div>

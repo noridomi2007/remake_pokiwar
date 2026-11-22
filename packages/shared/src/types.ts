@@ -59,11 +59,13 @@ export interface Pos {
   col: number;
 }
 
+export type GemMultiplier = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
 export interface GemCell {
   id: number;
   type: GemType;
-  /** Dot.multiplier: 1, 2, 3, or 4 (x2/x3/x4 badges in PokiGuard) */
-  multiplier?: 1 | 2 | 3 | 4;
+  /** Dot.multiplier: 1..7 (x2..x7 badges in PokiGuard) */
+  multiplier?: GemMultiplier;
 }
 
 export type BoardGrid = GemCell[][];
@@ -124,6 +126,17 @@ export interface SkillDef {
   cleanseDebuffs?: boolean;
   /** Probability [0..1] for statusEffect to trigger; defaults to 1 */
   statusChance?: number;
+  /** Authentic Pokiwar gem-collection unlock or auto-trigger condition (e.g. Tụ Lực 9 Kiếm, Hộ Vệ Crazy 12 Ngọc) */
+  gemRequirement?: {
+    /** Specific gem type to collect, or omit to count ANY gem type */
+    gemType?: GemType;
+    /** Effective gem points needed */
+    count: number;
+    /** UNLOCK_CARD = must collect count gems before casting; AUTO_TRIGGER = fires automatically on match when count reached */
+    mode: 'UNLOCK_CARD' | 'AUTO_TRIGGER';
+    /** Short Vietnamese label */
+    label?: string;
+  };
   statusEffect?: {
     kind: 'BURN' | 'POISON' | 'STUN' | 'ATK_UP' | 'SHIELD_REGEN' | 'DEEP_WOUND' | 'SILENCE' | 'REFLECT';
     value: number;
@@ -234,6 +247,12 @@ export interface BattleFighter {
   accumStacks?: number;
   /** Pokiwar 4.0 Đột Phá Pet Level (0..5) */
   breakthroughLevel?: number;
+  /** Per-gem effective points collected during battle for authentic gem-charge skills */
+  gemsCollected?: Record<GemType, number>;
+  /** Total effective gem points collected during battle */
+  totalGemsCollected?: number;
+  /** Number of Special Skill casts performed in this battle (e.g. Galaxy Risky 4th cast x2) */
+  skillCastCount?: number;
   allyCount?: number;
 }
 
@@ -296,7 +315,7 @@ export interface MatchGroup {
 export interface GravityDrop {
   gemId: number;
   type: GemType;
-  multiplier: 1 | 2 | 3 | 4;
+  multiplier: GemMultiplier;
   fromRow: number;
   toRow: number;
   col: number;
@@ -470,7 +489,7 @@ export interface AuraDef {
 
 export interface GloryShopItemDef {
   id: string;
-  kind: 'SHARD' | 'EQUIPMENT' | 'AURA' | 'STONE_LV5' | 'GEN_CORE' | 'CHARM';
+  kind: 'SHARD' | 'EQUIPMENT' | 'AURA' | 'STONE_LV4' | 'STONE_LV5' | 'GEN_CORE';
   name: string;
   icon: string;
   refId?: string;

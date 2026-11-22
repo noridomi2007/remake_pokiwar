@@ -1,7 +1,6 @@
 import {
   applyPetProgression,
   CARD_UPGRADE_GOLD_COSTS,
-  CHARM_PRICES,
   computeAuraTotalBonuses,
   computeEquipmentBonuses,
   computePetPower,
@@ -100,7 +99,6 @@ export interface PlayerProgress {
   claimedAchievements?: string[];
   legendSpinCount?: number;
   stoneBag?: [number, number, number, number, number];
-  charms?: { binhAn: number; mayMan: number };
   wins: number;
   worldBossBestDamage?: number;
   wheelSpunCount?: number;
@@ -182,7 +180,6 @@ interface MainLobbyProps {
   onJoinRoom: (code: string) => void;
   onBuyStones: (amount: number, goldCost: number) => void;
   onBuyStoneLv?: (lvIdx: number, count: number, goldCost: number) => void;
-  onBuyCharm?: (kind: 'binhAn' | 'mayMan', goldCost: number) => void;
   onSpinWheel?: (prize: WheelPrizeDef, goldCost: number) => void;
   onSpinWheelBatch?: (prizes: WheelPrizeDef[], goldCost: number) => void;
   onSmashEgg?: (drops: EggDropItem[], goldCost: number, stoneCost: number) => void;
@@ -280,7 +277,6 @@ export function MainLobby({
   onJoinRoom,
   onBuyStones,
   onBuyStoneLv,
-  onBuyCharm,
   onSpinWheel,
   onSpinWheelBatch,
   onSmashEgg,
@@ -319,7 +315,6 @@ export function MainLobby({
   const avatarId = progress.avatarId ?? '29';
   const avatarDef = getAvatarById(avatarId);
   const unlockedAvatars = progress.unlockedAvatars ?? ['29'];
-  const charms = progress.charms ?? { binhAn: 2, mayMan: 2 };
 
   const activeBase = getPetById(progress.selectedPetId);
   const activeTier = activeBase.tier;
@@ -1364,46 +1359,6 @@ export function MainLobby({
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-              <div className="pk-stone-panel" style={{ padding: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <img src="/assets/pokiguard/sprites/charm_binh_an.png" alt="Bùa Bình An" style={{ width: 44 }} />
-                  <div>
-                    <div style={{ fontWeight: 900, color: '#86efac', fontSize: 13 }}>Bùa Bình An (Đang có: {charms.binhAn})</div>
-                    <div style={{ fontSize: 11, color: '#cbd5e1' }}>Chống tụt cấp khi cường hóa thất bại</div>
-                    <div style={{ fontSize: 11.5, color: '#fde047', fontWeight: 700 }}>{CHARM_PRICES.binhAn} Vàng</div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="pk-btn-gold"
-                  disabled={progress.gold < CHARM_PRICES.binhAn}
-                  onClick={() => onBuyCharm?.('binhAn', CHARM_PRICES.binhAn)}
-                >
-                  Mua
-                </button>
-              </div>
-
-              <div className="pk-stone-panel" style={{ padding: 11, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <img src="/assets/pokiguard/sprites/charm_may_man.png" alt="Bùa May Mắn" style={{ width: 44 }} />
-                  <div>
-                    <div style={{ fontWeight: 900, color: '#fef08a', fontSize: 13 }}>Bùa May Mắn (Đang có: {charms.mayMan})</div>
-                    <div style={{ fontSize: 11, color: '#cbd5e1' }}>Tăng +15% tỉ lệ nâng cấp thành công</div>
-                    <div style={{ fontSize: 11.5, color: '#fde047', fontWeight: 700 }}>{CHARM_PRICES.mayMan} Vàng</div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="pk-btn-gold"
-                  disabled={progress.gold < CHARM_PRICES.mayMan}
-                  onClick={() => onBuyCharm?.('mayMan', CHARM_PRICES.mayMan)}
-                >
-                  Mua
-                </button>
-              </div>
-            </div>
-
             {/* Bulk Stone Packs */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
@@ -2140,7 +2095,7 @@ export function MainLobby({
                 <div style={{ fontWeight: 900, fontSize: 14.5, color: '#fde047' }}>TRỨNG VÀNG CỔ ĐIỂN</div>
                 <img src="/assets/pokiguard/sprites/chest_big.png" alt="Trứng Vàng" style={{ width: 72, height: 72, objectFit: 'contain' }} />
                 <div style={{ fontSize: 11.5, color: '#cbd5e1' }}>
-                  Rơi: Pet S (4%), Mảnh Pet, Đá C2–C3, Bùa Bình An, Vàng
+                  Rơi: Pet S (4%), Mảnh Pet, Đá C2–C3, Vàng
                 </div>
                 <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 4 }}>
                   <button
@@ -2180,7 +2135,7 @@ export function MainLobby({
                 <div style={{ fontWeight: 900, fontSize: 14.5, color: '#fb923c' }}>TRỨNG THẦN THÚ MEGA</div>
                 <img src="/assets/pokiguard/sprites/chest_big_open.png" alt="Trứng Thần Thú" style={{ width: 72, height: 72, objectFit: 'contain' }} />
                 <div style={{ fontSize: 11.5, color: '#fed7aa' }}>
-                  Rơi: <strong>Full Pet Mega (8%)</strong>, +10 Mảnh Mega, Đá C4, Bùa May Mắn
+                  Rơi: <strong>Full Pet Mega (8%)</strong>, +10 Mảnh Mega, Đá C4–C5
                 </div>
                 <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 4 }}>
                   <button
@@ -2322,7 +2277,7 @@ export function MainLobby({
               {[
                 { day: 1, label: '+800 Vàng', icon: '/assets/pokiguard/sprites/gold.png' },
                 { day: 2, label: '+4 Đá Cấp 3', icon: '/assets/pokiguard/sprites/stone_f_3.png' },
-                { day: 3, label: '+2 Bùa May Mắn', icon: '/assets/pokiguard/sprites/charm_may_man.png' },
+                { day: 3, label: '+3 Đá Cấp 3', icon: '/assets/pokiguard/sprites/stone_w_3.png' },
                 { day: 4, label: '+15 Mảnh Zida', icon: '/assets/pokiguard/pets/1412.png' },
                 { day: 5, label: '+3 Đá Cấp 4', icon: '/assets/pokiguard/sprites/stone_w_4.png' },
                 { day: 6, label: '+2,000 Vàng', icon: '/assets/pokiguard/sprites/gold.png' },

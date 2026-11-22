@@ -19,7 +19,9 @@ import {
   getElementMultiplier,
   getPetById,
   getPetSpritePath,
+  getSingleStoneUpgradeRate,
   MAX_PET_LEVEL,
+  MAX_UPGRADE_STONE_SLOTS,
   passTurn,
   PET_AURAS,
   PVE_STAGES,
@@ -166,11 +168,13 @@ describe('Combat Engine, Progression & Bot AI', () => {
     expect(enemy.hp).toBeLessThan(enemy.maxHp);
     expect(state.currentTurn).not.toBe(side);
 
-    // Ultimate skill QTE multiplier check (using Mega Elpidios Special Skill Card against tanky target)
-    const sA = createBattleState(getPetById('pet-mega-elpidios'), getPetById('pet-mega-icarus'), 888, 3);
-    const sB = createBattleState(getPetById('pet-mega-elpidios'), getPetById('pet-mega-icarus'), 888, 3);
-    const sideA = sA.currentTurn;
-    const defSide = sideA === 'P1' ? 'P2' : 'P1';
+    // Ultimate skill QTE multiplier check (using Primal Orithyia who authentically uses 4-arrow Audition QTE)
+    const sA = createBattleState(getPetById('pet-primal-orithyia'), getPetById('pet-mega-icarus'), 888, 3);
+    const sB = createBattleState(getPetById('pet-primal-orithyia'), getPetById('pet-mega-icarus'), 888, 3);
+    sA.currentTurn = 'P1';
+    sB.currentTurn = 'P1';
+    const sideA = 'P1' as const;
+    const defSide = 'P2' as const;
     sA.fighters[defSide].maxHp = 50000;
     sA.fighters[defSide].hp = 50000;
     sB.fighters[defSide].maxHp = 50000;
@@ -208,10 +212,10 @@ describe('Combat Engine, Progression & Bot AI', () => {
     }
   });
 
-  it('keeps each of the 70 authentic Pokiwar 4.0 pets as a standalone Pet with 1 fixed sprite and supports Synthesis Recipes, Star rating (1★..6★) & Gen T2 (0..5)', () => {
-    expect(STARTER_PETS.length).toBe(70);
+  it('keeps each of the 72 authentic Pokiwar 4.0 pets as a standalone Pet with 1 fixed sprite and supports Synthesis Recipes, Star rating (1★..6★) & Gen T2 (0..5)', () => {
+    expect(STARTER_PETS.length).toBe(72);
     expect(DUNGEON_ISLANDS).toHaveLength(6);
-    expect(PVE_STAGES).toHaveLength(53);
+    expect(PVE_STAGES).toHaveLength(55);
     // Ensure fabricated / wrong-art pets were purged cleanly
     expect(STARTER_PETS.some((p) => p.id.startsWith('pet-titan-') || p.id === 'pet-fantasy-naruto' || p.id === 'pet-fantasy-yugi')).toBe(false);
     const lion = getPetById('pet-583');
@@ -411,11 +415,50 @@ describe('Combat Engine, Progression & Bot AI', () => {
     }
   });
 
-  it('computes Pokiwar 4.0 Multi-Stone Luck, Aura Cumulative Stacking & 6-Slot Equipment + Xung Phá bonuses', () => {
-    const rateSingle = calcMultiStoneUpgradeRate(12, [0, 1, 0, 0, 0], 0, false);
-    const rateMultiLuck = calcMultiStoneUpgradeRate(12, [0, 1, 2, 1, 0], 24, true);
-    expect(rateMultiLuck).toBeGreaterThan(rateSingle);
-    expect(rateMultiLuck).toBeLessThanOrEqual(100);
+  it('computes 3-Stone Socket Upgrade Rate (level-decaying per stone, max 3 slots, no charms), Aura Cumulative Stacking & 6-Slot Equipment bonuses', () => {
+    expect(MAX_UPGRADE_STONE_SLOTS).toBe(3);
+
+    // Per-stone rate strictly decreases from Lv.1 -> Lv.14 and becomes 0 at Lv.15
+    for (let stoneLv = 1; stoneLv <= 5; stoneLv++) {
+      let prev = Infinity;
+      for (let lv = 1; lv < MAX_PET_LEVEL; lv++) {
+        const r = getSingleStoneUpgradeRate(lv, stoneLv);
+        expect(r).toBeGreaterThan(0);
+        expect(r).toBeLessThan(prev);
+        prev = r;
+      }
+      expect(getSingleStoneUpgradeRate(MAX_PET_LEVEL, stoneLv)).toBe(0);
+    }
+
+    // Higher stone grade yields higher single-stone rate at the same pet level
+    expect(getSingleStoneUpgradeRate(10, 5)).toBeGreaterThan(getSingleStoneUpgradeRate(10, 4));
+    expect(getSingleStoneUpgradeRate(10, 4)).toBeGreaterThan(getSingleStoneUpgradeRate(10, 3));
+    expect(getSingleStoneUpgradeRate(10, 3)).toBeGreaterThan(getSingleStoneUpgradeRate(10, 2));
+    expect(getSingleStoneUpgradeRate(10, 2)).toBeGreaterThan(getSingleStoneUpgradeRate(10, 1));
+
+    // Multi-stone rate sums up to 3 installed stones + accumulated luck (0 when empty or max level)
+    expect(calcMultiStoneUpgradeRate(10, [0, 0, 0, 0, 0], 20)).toBe(0);
+    expect(calcMultiStoneUpgradeRate(MAX_PET_LEVEL, [0, 0, 0, 0, 3], 20)).toBe(0);
+
+    const rateSingle = calcMultiStoneUpgradeRate(12, [0, 1, 0, 0, 0], 0);
+    const rateThree = calcMultiStoneUpgradeRate(12, [0, 1, 1, 1, 0], 10);
+    expect(rateSingle).toBe(getSingleStoneUpgradeRate(12, 2));
+    expect(rateThree).toBe(
+      Math.min(
+        100,
+        getSingleStoneUpgradeRate(12, 2) +
+          getSingleStoneUpgradeRate(12, 3) +
+          getSingleStoneUpgradeRate(12, 4) +
+          10,
+      ),
+    );
+    expect(rateThree).toBeGreaterThan(rateSingle);
+
+    // Enforces 3-stone cap even if caller passes > 3 stones
+    const cappedAt3 = calcMultiStoneUpgradeRate(14, [0, 0, 0, 0, 5], 0);
+    const exact3 = calcMultiStoneUpgradeRate(14, [0, 0, 0, 0, 3], 0);
+    expect(cappedAt3).toBe(exact3);
+    expect(cappedAt3).toBe(getSingleStoneUpgradeRate(14, 5) * 3);
 
     const allAuraBonuses = computeAuraTotalBonuses(PET_AURAS.map((a) => a.id));
     const oneAuraBonuses = computeAuraTotalBonuses(['aura-gold']);
@@ -573,19 +616,21 @@ describe('Combat Engine, Progression & Bot AI', () => {
     expect(lv99.maxHp).toBe(lv15.maxHp);
     expect(lv99.attack).toBe(lv15.attack);
     expect(lv99.defense).toBe(lv15.defense);
-    expect(calcMultiStoneUpgradeRate(15, [0, 0, 0, 0, 4], 60, true)).toBe(0);
+    expect(calcMultiStoneUpgradeRate(15, [0, 0, 0, 0, 4], 60)).toBe(0);
 
-    // Monotonic tier balance check: average HP & ATK scale cleanly from BASE -> S -> MEGA -> GALAXY -> FANTASY
+    // Monotonic tier balance check: average HP & ATK scale cleanly from BASE -> S -> LEGEND -> MEGA -> GALAXY -> FANTASY -> ANCIENT
     const avgStat = (tier: string, key: 'maxHp' | 'attack') => {
       const list = STARTER_PETS.filter((p) => p.tier === tier);
       expect(list.length).toBeGreaterThan(0);
       return list.reduce((s, p) => s + p[key], 0) / list.length;
     };
     expect(avgStat('S', 'maxHp')).toBeGreaterThan(avgStat('BASE', 'maxHp'));
-    expect(avgStat('MEGA', 'maxHp')).toBeGreaterThan(avgStat('S', 'maxHp'));
+    expect(avgStat('LEGEND', 'maxHp')).toBeGreaterThan(avgStat('S', 'maxHp'));
+    expect(avgStat('MEGA', 'maxHp')).toBeGreaterThan(avgStat('LEGEND', 'maxHp'));
     expect(avgStat('GALAXY', 'maxHp')).toBeGreaterThan(avgStat('MEGA', 'maxHp'));
     expect(avgStat('FANTASY', 'maxHp')).toBeGreaterThan(avgStat('GALAXY', 'maxHp'));
-    expect(avgStat('FANTASY', 'attack')).toBeGreaterThan(avgStat('MEGA', 'attack'));
+    expect(avgStat('ANCIENT', 'maxHp')).toBeGreaterThan(avgStat('FANTASY', 'maxHp'));
+    expect(avgStat('ANCIENT', 'attack')).toBeGreaterThan(avgStat('FANTASY', 'attack'));
 
     // Hardcore Boss empowerment: >= 2.5x HP, higher ATK/DEF, big initial shield, regen buff, and >= 1 revive heart
     const p1 = applyPetProgression(getPetById('pet-mega-zidarose'), 15, undefined, 5, 3, 2);
@@ -598,5 +643,145 @@ describe('Combat Engine, Progression & Bot AI', () => {
     expect(bossBattle.fighters.P2.shield).toBeGreaterThanOrEqual(Math.round(bossBattle.fighters.P2.maxHp * 0.35));
     expect(bossBattle.fighters.P2.reviveCharges ?? 0).toBeGreaterThanOrEqual(1);
     expect(bossBattle.fighters.P2.statuses.some((s) => s.kind === 'SHIELD_REGEN')).toBe(true);
+
+    // Dynamic PokiGuard/Pokiwar 2 Max Mana scales with Pet Magic stat (> 250 base)
+    expect(normalBattle.fighters.P1.maxMana).toBeGreaterThan(600);
+    expect(normalBattle.fighters.P1.maxMana).toBeGreaterThan(
+      createBattleState(getPetById('pet-581'), getPetById('pet-581'), 111, 1, 1, 1).fighters.P1.maxMana,
+    );
+  });
+
+  it('enforces authentic Pokiwar skill triggers: only QTE pets need arrows, gem-requirement cards unlock on gem count, and Shadow Sword Tụ Lực auto-triggers at 9 Swords', () => {
+    expect(getPetById('pet-mega-prysma').skills[0].needPerfection).toBe(true);
+    expect(getPetById('pet-primal-orithyia').skills[0].needPerfection).toBe(true);
+    expect(getPetById('pet-mega-zidarose').skills[0].needPerfection).toBe(false);
+    expect(getPetById('pet-mega-icarus').skills[0].needPerfection).toBe(false);
+    expect(getPetById('pet-mega-zero').skills[0].needPerfection).toBe(false);
+    expect(getPetById('pet-fantasy-joker').skills[0].needPerfection).toBe(false);
+
+    // Fantasy Joker UNLOCK_CARD requires 12 total gem points before casting
+    const joker = getPetById('pet-fantasy-joker');
+    const glank = getPetById('pet-galaxy-glank');
+    const stJ = createBattleState(joker, glank, 7070);
+    stJ.currentTurn = 'P1';
+    stJ.fighters.P1.mana = 300;
+    stJ.fighters.P1.rage = 250;
+    expect(executeSkill(stJ, 'P1', joker.skills[0].id).ok).toBe(false);
+    stJ.fighters.P1.totalGemsCollected = 12;
+    expect(executeSkill(stJ, 'P1', joker.skills[0].id).ok).toBe(true);
+
+    // Galaxy Shadow Sword AUTO_TRIGGER Tụ Lực fires automatically on matching Sword gems once >= 9
+    const ss = getPetById('pet-galaxy-shadow-sword');
+    const stS = createBattleState(ss, glank, 7071);
+    stS.currentTurn = 'P1';
+    stS.fighters.P1.gemsCollected = { SWORD: 6, LIGHTNING: 0, FIRE: 0, HEART: 0, YINYANG: 0, COIN: 0 };
+    stS.board = makeGrid([
+      ['SWORD', 'SWORD', 'HEART', 'FIRE', 'LIGHTNING', 'COIN', 'YINYANG', 'HEART'],
+      ['LIGHTNING', 'COIN', 'SWORD', 'YINYANG', 'HEART', 'FIRE', 'LIGHTNING', 'COIN'],
+      ['YINYANG', 'HEART', 'FIRE', 'LIGHTNING', 'COIN', 'YINYANG', 'HEART', 'FIRE'],
+      ['COIN', 'YINYANG', 'LIGHTNING', 'HEART', 'FIRE', 'LIGHTNING', 'COIN', 'YINYANG'],
+      ['HEART', 'FIRE', 'COIN', 'YINYANG', 'LIGHTNING', 'HEART', 'FIRE', 'COIN'],
+      ['LIGHTNING', 'COIN', 'YINYANG', 'FIRE', 'HEART', 'COIN', 'YINYANG', 'LIGHTNING'],
+      ['FIRE', 'HEART', 'LIGHTNING', 'COIN', 'YINYANG', 'FIRE', 'HEART', 'FIRE'],
+      ['YINYANG', 'LIGHTNING', 'HEART', 'FIRE', 'COIN', 'HEART', 'LIGHTNING', 'YINYANG'],
+    ]);
+    const swapRes = executeSwap(stS, 'P1', { row: 0, col: 2 }, { row: 1, col: 2 });
+    expect(swapRes.ok).toBe(true);
+    expect(swapRes.events.some((e) => e.type === 'SKILL_CAST' && e.side === 'P1')).toBe(true);
+
+    // Galaxy Chess Master (G6) balance check: Top-3 Galaxy stats + Nước Cờ stacking damage!
+    const chess = getPetById('pet-3090');
+    const risky = getPetById('pet-galaxy-risky');
+    const glank2 = getPetById('pet-galaxy-glank');
+    expect(chess.magic).toBeGreaterThanOrEqual(risky.magic);
+    expect(chess.maxHp).toBeGreaterThan(risky.maxHp);
+    const stC = createBattleState(chess, glank2, 7072);
+    stC.fighters.P2.maxHp = 80000;
+    stC.fighters.P2.hp = 80000;
+    stC.currentTurn = 'P1';
+    stC.fighters.P1.mana = 500;
+    stC.fighters.P1.rage = 250;
+    stC.fighters.P1.gemsCollected = { SWORD: 0, LIGHTNING: 0, FIRE: 10, HEART: 0, YINYANG: 0, COIN: 0 };
+    const cast1 = executeSkill(stC, 'P1', chess.skills[0].id);
+    expect(cast1.ok).toBe(true);
+    const cast1Ev = cast1.events.find((e) => e.type === 'SKILL_CAST');
+    expect(cast1Ev && cast1Ev.type === 'SKILL_CAST' && cast1Ev.specialNote).toContain('Nước Cờ ×1');
+    stC.currentTurn = 'P1';
+    stC.fighters.P1.cooldowns = {};
+    stC.fighters.P1.mana = 500;
+    stC.fighters.P1.rage = 250;
+    const cast2 = executeSkill(stC, 'P1', chess.skills[0].id);
+    expect(cast2.ok).toBe(true);
+    const cast2Ev = cast2.events.find((e) => e.type === 'SKILL_CAST');
+    expect(cast2Ev && cast2Ev.type === 'SKILL_CAST' && cast2Ev.specialNote).toContain('Nước Cờ ×2');
+  });
+
+  it('reclassifies the 8 old fake-Ancient pets to LEGEND and integrates authentic Pokiwar 4.0 Ancient Arceus (A1) & Ancient Rayquaza (A3)', () => {
+    const reclassifiedIds = [
+      'pet-601',
+      'pet-2273',
+      'pet-2440',
+      'pet-2970',
+      'pet-2279',
+      'pet-2449',
+      'pet-primal-orithyia',
+      'pet-boss-spetra',
+    ];
+    for (const id of reclassifiedIds) {
+      expect(getPetById(id).tier).toBe('LEGEND');
+    }
+
+    const ancientPets = STARTER_PETS.filter((p) => p.tier === 'ANCIENT');
+    expect(ancientPets.map((p) => p.id).sort()).toEqual(['pet-ancient-arceus', 'pet-ancient-rayquaza']);
+
+    const arceus = getPetById('pet-ancient-arceus');
+    const rayquaza = getPetById('pet-ancient-rayquaza');
+    expect(arceus.element).toBe('KIM');
+    expect(rayquaza.element).toBe('MOC');
+    expect(rayquaza.maxHp).toBeGreaterThan(arceus.maxHp);
+
+    // Opening armor, revive, and swap board-blast + post-swap proc
+    const glank = getPetById('pet-galaxy-glank');
+    const stRay = createBattleState(rayquaza, glank, 8081);
+    expect(stRay.fighters.P1.shield).toBeGreaterThanOrEqual(450);
+    expect(stRay.fighters.P1.reviveCharges).toBeGreaterThanOrEqual(1);
+    stRay.currentTurn = 'P1';
+    stRay.board = makeGrid([
+      ['SWORD', 'SWORD', 'HEART', 'FIRE', 'LIGHTNING', 'COIN', 'YINYANG', 'HEART'],
+      ['LIGHTNING', 'COIN', 'SWORD', 'YINYANG', 'HEART', 'FIRE', 'LIGHTNING', 'COIN'],
+      ['YINYANG', 'HEART', 'FIRE', 'LIGHTNING', 'COIN', 'YINYANG', 'HEART', 'FIRE'],
+      ['COIN', 'YINYANG', 'LIGHTNING', 'HEART', 'FIRE', 'LIGHTNING', 'COIN', 'YINYANG'],
+      ['HEART', 'FIRE', 'COIN', 'YINYANG', 'LIGHTNING', 'HEART', 'FIRE', 'COIN'],
+      ['LIGHTNING', 'COIN', 'YINYANG', 'FIRE', 'HEART', 'COIN', 'YINYANG', 'LIGHTNING'],
+      ['FIRE', 'HEART', 'LIGHTNING', 'COIN', 'YINYANG', 'FIRE', 'HEART', 'FIRE'],
+      ['YINYANG', 'LIGHTNING', 'HEART', 'FIRE', 'COIN', 'HEART', 'LIGHTNING', 'YINYANG'],
+    ]);
+    const raySwap = executeSwap(stRay, 'P1', { row: 0, col: 2 }, { row: 1, col: 2 });
+    expect(raySwap.ok).toBe(true);
+    expect(raySwap.events.some((e) => e.type === 'SKILL_CAST' && e.skillName.includes('Ancient Rayquaza'))).toBe(true);
+
+    // Ancient Arceus Special Card inflicts DEEP_WOUND (+20% damage taken) and heals caster
+    const stArc = createBattleState(arceus, glank, 8082);
+    stArc.currentTurn = 'P1';
+    stArc.fighters.P1.hp = Math.round(stArc.fighters.P1.maxHp * 0.5);
+    stArc.fighters.P1.mana = 400;
+    stArc.fighters.P1.rage = 250;
+    stArc.fighters.P1.totalGemsCollected = 8;
+    const arcSkill = executeSkill(stArc, 'P1', arceus.skills[0].id);
+    expect(arcSkill.ok).toBe(true);
+    expect(stArc.fighters.P2.statuses.some((s) => s.kind === 'DEEP_WOUND')).toBe(true);
+    expect(stArc.fighters.P1.hp).toBeGreaterThan(Math.round(stArc.fighters.P1.maxHp * 0.5));
+
+    // Ancient status immunity: enemy STUN/POISON skill does not stun Ancient Arceus
+    const spetra = getPetById('pet-boss-spetra');
+    const stImm = createBattleState(arceus, spetra, 8083);
+    stImm.currentTurn = 'P2';
+    stImm.fighters.P2.mana = 500;
+    stImm.fighters.P2.rage = 250;
+    stImm.fighters.P2.gemsCollected = { SWORD: 10, LIGHTNING: 10, FIRE: 10, HEART: 10, YINYANG: 10, COIN: 10 };
+    stImm.fighters.P2.totalGemsCollected = 20;
+    const spCast = executeSkill(stImm, 'P2', spetra.skills[0].id);
+    expect(spCast.ok).toBe(true);
+    expect(stImm.fighters.P1.statuses.some((s) => s.kind === 'STUN')).toBe(false);
   });
 });

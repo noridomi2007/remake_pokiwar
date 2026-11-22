@@ -22,6 +22,7 @@ import {
   getPetSpriteId,
   getPetSpritePath,
   MAX_PET_LEVEL,
+  MAX_UPGRADE_STONE_SLOTS,
   ONLINE_REWARDS,
   passTurn,
   PET_BREAKTHROUGH_GEN_COSTS,
@@ -144,7 +145,6 @@ function normalizeProgress(parsed?: Partial<PlayerProgress> | null): PlayerProgr
     claimedAchievements: parsed?.claimedAchievements ?? [],
     legendSpinCount: parsed?.legendSpinCount ?? 0,
     stoneBag: parsed?.stoneBag ?? [8, 4, 2, 1, 0],
-    charms: parsed?.charms ?? { binhAn: 2, mayMan: 2 },
     wins: parsed?.wins ?? 0,
     worldBossBestDamage: parsed?.worldBossBestDamage ?? 0,
     wheelSpunCount: parsed?.wheelSpunCount ?? 0,
@@ -219,6 +219,9 @@ export function App() {
   const [actionCue, setActionCue] = useState<StageActionCue | null>(null);
   const [animCommand, setAnimCommand] = useState<AnimCommand | null>(null);
   const [popups, setPopups] = useState<FloatingPopup[]>([]);
+  const [battleSpeed, setBattleSpeed] = useState<1 | 2>(1);
+  const battleSpeedRef = useRef<1 | 2>(1);
+  battleSpeedRef.current = battleSpeed;
 
   // PvP Socket
   const wsRef = useRef<WebSocket | null>(null);
@@ -444,12 +447,12 @@ export function App() {
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  const spawnPopup = useCallback((side: Side, text: string, color: string) => {
+  const spawnPopup = useCallback((side: Side, text: string, color: string, isBurst = false) => {
     const id = seqRef.current++;
-    setPopups((prev) => [...prev, { id, side, text, color }]);
+    setPopups((prev) => [...prev, { id, side, text, color, isBurst }]);
     setTimeout(() => {
       setPopups((prev) => prev.filter((p) => p.id !== id));
-    }, 1050);
+    }, isBurst ? 1150 : 1020);
   }, []);
 
   const playEventsVisuals = useCallback(
@@ -485,10 +488,12 @@ export function App() {
           if (ev.damage && ev.damage > 0) {
             totalDmg += ev.damage;
             hitTarget = ev.target;
+            const heavyHit = Boolean(ev.isCrit || ev.damage >= Math.round(nextState.fighters[ev.target].maxHp * 0.14));
             spawnPopup(
               ev.target,
-              ev.isCrit ? `-${ev.damage} CHÍ MẠNG!` : `-${ev.damage}`,
-              ev.isCrit ? '#fde047' : '#fb7185',
+              ev.isCrit ? `${ev.damage.toLocaleString('vi-VN')}!` : `${ev.damage.toLocaleString('vi-VN')}`,
+              ev.isCrit ? '#fde047' : '#ffffff',
+              heavyHit,
             );
           }
           if (ev.heal && ev.heal > 0) {
@@ -558,10 +563,10 @@ export function App() {
           isSkill = true;
           attackerSide = ev.side;
           calloutText = ev.skillName;
-          skillCardImage = '/assets/pokiguard/cards/card1.png';
+          skillCardImage = '/assets/pokiguard/cards/card4.png';
           totalDmg += ev.damage;
           hitTarget = ev.side === 'P1' ? 'P2' : 'P1';
-          spawnPopup(hitTarget, `-${ev.damage}`, '#38bdf8');
+          spawnPopup(hitTarget, `${ev.damage.toLocaleString('vi-VN')}`, '#ffffff', true);
         }
         if (ev.type === 'SKILL_CAST') {
           isSkill = true;
@@ -576,8 +581,9 @@ export function App() {
             hitTarget = ev.side === 'P1' ? 'P2' : 'P1';
             spawnPopup(
               hitTarget,
-              ev.qteGrade === 'PERFECT' ? `-${ev.damage} PERFECT!` : `-${ev.damage}`,
-              ev.qteGrade === 'PERFECT' ? '#4ade80' : '#fde047',
+              `${ev.damage.toLocaleString('vi-VN')}`,
+              ev.qteGrade === 'PERFECT' ? '#fef08a' : '#ffffff',
+              true,
             );
           }
           if (ev.heal && ev.heal > 0) {
@@ -620,9 +626,10 @@ export function App() {
           }
         : null;
 
+      const spd = battleSpeedRef.current === 2 ? 1.85 : 1;
       if (totalDmg > 0 || isSkill) {
         if (hitTarget) {
-          setTimeout(() => sfx.playHit(), 260);
+          setTimeout(() => sfx.playHit(), Math.round(260 / spd));
         }
         setBoardFaded(true);
         if (nextCallout) setCallout(nextCallout);
@@ -643,7 +650,7 @@ export function App() {
         setTimeout(() => {
           setBoardFaded(false);
           setCallout(null);
-        }, 720);
+        }, Math.round(780 / spd));
       } else {
         const selfAnimType =
           totalRage > 0
@@ -714,6 +721,7 @@ export function App() {
 
       setAnimatingTurn(true);
       setLastEvents([]);
+      const spd = battleSpeedRef.current === 2 ? 1.85 : 1;
       let t = 0;
 
       // PHASE 1: Glowing Gem Swipe Trail + 2-Gem Slide Swap
@@ -724,10 +732,10 @@ export function App() {
         swapped[swapEv.to.row][swapEv.to.col] = tmp;
         setActiveSwipe({ id: seqRef.current++, from: swapEv.from, to: swapEv.to, valid: true });
         setDisplayBoard(swapped);
-        t += 195;
+        t += Math.round(195 / spd);
       } else if (prevBoard) {
         setDisplayBoard(prevBoard);
-        t += 80;
+        t += Math.round(80 / spd);
       }
 
       // PHASE 2: Sequential Match-3 Pop (bộ 3 -> bộ 3 -> gravity refill -> combo 2...)
@@ -757,7 +765,7 @@ export function App() {
             setCollectedGems(traySnapshot);
             setCollectedCombo(comboNow);
           });
-          t += 175;
+          t += Math.round(175 / spd);
         });
 
         // Gravity refill for THIS cascade!
@@ -769,17 +777,17 @@ export function App() {
             setDisplayBoard(refillEv.boardAfter);
             setLastEvents([refillEv]);
           });
-          t += 235;
+          t += Math.round(235 / spd);
         }
       });
 
-      // PHASE 3: Showcase Collected Gems Tray (Khay Ngọc Đã Ăn) while board fades softly
+      // PHASE 3: Hide Board & Showcase Collected Gems Tray (PokiGuard style)
       const showcaseTime = t;
       schedulePlayback(showcaseTime, () => {
         setBreakingGroup(null);
         setBoardFaded(true);
       });
-      t += 430;
+      t += Math.round(400 / spd);
 
       // PHASE 4: Execute Eaten Gems Effects + Pet Dash/Skill Animation + Damage/Heal Popups
       const executeTime = t;
@@ -792,7 +800,7 @@ export function App() {
       });
 
       // Release lock after Pet animation finishes
-      schedulePlayback(executeTime + 680, () => {
+      schedulePlayback(executeTime + Math.round(700 / spd), () => {
         setCollectedGems([]);
         setCollectedCombo(0);
         setBoardFaded(false);
@@ -1384,8 +1392,9 @@ export function App() {
   };
 
   const handleClaimFlipReward = (reward: {
-    kind: 'GOLD' | 'STONE' | 'CHARM' | 'SHARD';
+    kind: 'GOLD' | 'STONE' | 'SHARD';
     amount: number;
+    stoneLv?: number;
     petId?: string;
     label: string;
     goldCost?: number;
@@ -1394,17 +1403,15 @@ export function App() {
     setProgress((prev) => {
       if (cost > 0 && prev.gold < cost) return prev;
       const bag = [...(prev.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-      const charms = { ...(prev.charms ?? { binhAn: 2, mayMan: 2 }) };
       const shards = { ...(prev.petShards ?? {}) };
       let gold = prev.gold - cost;
       let stones = prev.stones;
       if (reward.kind === 'GOLD') {
         gold += reward.amount;
       } else if (reward.kind === 'STONE') {
-        bag[1] = (bag[1] ?? 0) + reward.amount;
+        const lvIdx = Math.max(0, Math.min(4, (reward.stoneLv ?? 2) - 1));
+        bag[lvIdx] = (bag[lvIdx] ?? 0) + reward.amount;
         stones += reward.amount * 2;
-      } else if (reward.kind === 'CHARM') {
-        charms.mayMan += reward.amount;
       } else if (reward.kind === 'SHARD' && reward.petId) {
         shards[reward.petId] = (shards[reward.petId] ?? 0) + reward.amount;
       }
@@ -1413,7 +1420,6 @@ export function App() {
         gold,
         stones,
         stoneBag: bag,
-        charms,
         petShards: shards,
       };
     });
@@ -1465,10 +1471,8 @@ export function App() {
   const handleUpgradePet = (
     petId: string,
     goldCost: number,
-    stoneCost: number,
+    _stoneCost: number,
     stoneLv: number,
-    useBinhAn: boolean,
-    useMayMan: boolean,
     stackedStones?: [number, number, number, number, number],
   ): { success: boolean; message: string } => {
     const curLv = Math.max(1, Math.min(MAX_PET_LEVEL, progress.petLevels[petId] ?? 1));
@@ -1476,40 +1480,37 @@ export function App() {
       return { success: false, message: `👑 Pet đã đạt cấp tối đa Lv.${MAX_PET_LEVEL}/${MAX_PET_LEVEL}!` };
     }
     const bag = [...(progress.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-    const charms = { ...(progress.charms ?? { binhAn: 2, mayMan: 2 }) };
     const accLuck = progress.petUpgradeLuck?.[petId] ?? 0;
 
-    let usedStack: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-    let useBagStone = false;
+    // Lắp tối đa 3 viên đá (ưu tiên đá cấp cao nhất nếu truyền > 3)
+    const usedStack: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+    let slotsLeft = MAX_UPGRADE_STONE_SLOTS;
     if (stackedStones && stackedStones.some((n) => n > 0)) {
-      usedStack = [
-        Math.min(stackedStones[0], bag[0]),
-        Math.min(stackedStones[1], bag[1]),
-        Math.min(stackedStones[2], bag[2]),
-        Math.min(stackedStones[3], bag[3]),
-        Math.min(stackedStones[4], bag[4]),
-      ];
-      useBagStone = usedStack.some((n) => n > 0);
+      for (let i = 4; i >= 0 && slotsLeft > 0; i--) {
+        const want = Math.max(0, Math.floor(stackedStones[i] ?? 0));
+        const take = Math.min(want, bag[i] ?? 0, slotsLeft);
+        if (take > 0) {
+          usedStack[i] = take;
+          slotsLeft -= take;
+        }
+      }
     } else {
       const stoneIdx = Math.max(0, Math.min(4, stoneLv - 1));
-      if (bag[stoneIdx] > 0) {
+      if ((bag[stoneIdx] ?? 0) > 0) {
         usedStack[stoneIdx] = 1;
-        useBagStone = true;
+        slotsLeft -= 1;
       }
     }
 
-    if (progress.gold < goldCost || (!useBagStone && progress.stones < stoneCost)) {
-      return { success: false, message: 'Không đủ Vàng hoặc Đá nâng cấp!' };
+    const installedCount = MAX_UPGRADE_STONE_SLOTS - slotsLeft;
+    if (installedCount <= 0) {
+      return { success: false, message: 'Hãy lắp ít nhất 1 viên Đá (tối đa 3 ô) để nâng cấp!' };
+    }
+    if (progress.gold < goldCost) {
+      return { success: false, message: 'Không đủ Vàng để nâng cấp!' };
     }
 
-    const fallbackStack: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-    fallbackStack[Math.max(0, Math.min(4, stoneLv - 1))] = 1;
-    const rate = calcMultiStoneUpgradeRate(
-      curLv,
-      useBagStone ? usedStack : fallbackStack,
-      accLuck,
-      useMayMan && charms.mayMan > 0,
-    );
+    const rate = calcMultiStoneUpgradeRate(curLv, usedStack, accLuck);
     const rolled = Math.random() * 100;
     const succeeded = rolled < rate;
 
@@ -1523,34 +1524,21 @@ export function App() {
       if (nextLv >= 12) {
         broadcastAnnounce(`Chúc mừng ${progress.name} nâng cấp ${getPetById(petId).name} lên Lv.${nextLv}!`);
       }
-    } else if (useBinhAn && charms.binhAn > 0) {
-      charms.binhAn -= 1;
-      nextLuck = Math.min(60, accLuck + 10);
-      message = `Thất bại (${rate}%), Bùa Bình An giữ Lv.${curLv} & tích lũy +10% (Tổng +${nextLuck}%)!`;
     } else {
-      nextLv = Math.max(1, curLv - 1);
+      // Xóa cơ chế tụt cấp khi thất bại: luôn giữ nguyên cấp hiện tại & tích lũy +10%
+      nextLv = curLv;
       nextLuck = Math.min(60, accLuck + 10);
-      message =
-        nextLv < curLv
-          ? `Đập xịt (${rate}%)! Tụt xuống Lv.${nextLv}, tích lũy +10% may mắn (+${nextLuck}%)!`
-          : `Đập xịt tại Lv.1, tích lũy +10% may mắn (+${nextLuck}%)!`;
+      message = `Đập xịt (${rate}%)! Giữ nguyên Lv.${curLv} & tích lũy +10% (Tổng +${nextLuck}%)!`;
     }
 
-    if (useMayMan && charms.mayMan > 0 && curLv > 2) {
-      charms.mayMan -= 1;
-    }
-    if (useBagStone) {
-      for (let i = 0; i < 5; i++) {
-        bag[i] = Math.max(0, bag[i] - usedStack[i]);
-      }
+    for (let i = 0; i < 5; i++) {
+      bag[i] = Math.max(0, (bag[i] ?? 0) - usedStack[i]);
     }
 
     setProgress((prev) => ({
       ...prev,
       gold: prev.gold - goldCost,
-      stones: useBagStone ? prev.stones : prev.stones - stoneCost,
       stoneBag: bag,
-      charms,
       petLevels: { ...prev.petLevels, [petId]: nextLv },
       petUpgradeLuck: { ...(prev.petUpgradeLuck ?? {}), [petId]: nextLuck },
     }));
@@ -1701,18 +1689,16 @@ export function App() {
       if ((prev.gloryCoins ?? 0) < cost) return prev;
       const shards = { ...(prev.petShards ?? {}) };
       const bag = [...(prev.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-      const charms = { ...(prev.charms ?? { binhAn: 2, mayMan: 2 }) };
       let genCores = prev.genCores ?? 0;
 
       if (item.kind === 'SHARD' && item.refId) {
         shards[item.refId] = (shards[item.refId] ?? 0) + item.amount;
       } else if (item.kind === 'GEN_CORE') {
         genCores += item.amount;
+      } else if (item.kind === 'STONE_LV4') {
+        bag[3] += item.amount;
       } else if (item.kind === 'STONE_LV5') {
         bag[4] += item.amount;
-      } else if (item.kind === 'CHARM') {
-        charms.binhAn += item.amount;
-        charms.mayMan += item.amount;
       }
 
       return {
@@ -1720,7 +1706,6 @@ export function App() {
         gloryCoins: (prev.gloryCoins ?? 0) - cost,
         petShards: shards,
         stoneBag: bag,
-        charms,
         genCores,
       };
     });
@@ -2092,14 +2077,13 @@ export function App() {
       const claimed = prev.claimedCheckinDays ?? [];
       if (claimed.includes(day)) return prev;
       const bag = [...(prev.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-      const charms = { ...(prev.charms ?? { binhAn: 2, mayMan: 2 }) };
       const shards = { ...(prev.petShards ?? {}) };
       const unlocked = [...(prev.unlockedPets ?? [prev.selectedPetId, 'pet-581', 'pet-583', 'pet-1431', 'pet-725'])];
       const petLevels = { ...prev.petLevels };
       let gold = prev.gold;
       if (day === 1) gold += 800;
       if (day === 2) bag[2] += 4;
-      if (day === 3) charms.mayMan += 2;
+      if (day === 3) bag[2] += 3;
       if (day === 4) shards['pet-mega-zidarose'] = (shards['pet-mega-zidarose'] ?? 0) + 15;
       if (day === 5) bag[3] += 3;
       if (day === 6) gold += 2000;
@@ -2115,7 +2099,6 @@ export function App() {
         ...prev,
         gold,
         stoneBag: bag,
-        charms,
         petShards: shards,
         unlockedPets: unlocked,
         petLevels,
@@ -2142,7 +2125,6 @@ export function App() {
       const prevUsed = prev.redeemedCodes ?? [];
       if (prevUsed.includes(code)) return prev;
       const bag = [...(prev.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-      const charms = { ...(prev.charms ?? { binhAn: 2, mayMan: 2 }) };
       const shards = { ...(prev.petShards ?? {}) };
       const unlocked = [...(prev.unlockedPets ?? [prev.selectedPetId, 'pet-581', 'pet-583', 'pet-1431', 'pet-725'])];
       const petLevels = { ...prev.petLevels };
@@ -2162,8 +2144,8 @@ export function App() {
       } else if (code === 'ZINGME') {
         gold += 3000;
         gloryCoins += 300;
-        charms.binhAn += 5;
-        charms.mayMan += 5;
+        bag[3] += 4;
+        bag[4] += 2;
         if (!unlocked.includes('pet-1461')) {
           unlocked.push('pet-1461');
           petLevels['pet-1461'] = petLevels['pet-1461'] ?? 1;
@@ -2191,7 +2173,6 @@ export function App() {
         gloryCoins,
         genCores,
         stoneBag: bag,
-        charms,
         petShards: shards,
         unlockedPets: unlocked,
         petLevels,
@@ -2201,7 +2182,7 @@ export function App() {
 
     const msgMap: Record<string, string> = {
       POKIWAR40: '🎁 Đổi POKIWAR40: +5,000 Vàng, +50 Đá, +500 Xu Vinh Quang, +5 Gen T2 & +30 Mảnh Mega Zidarose!',
-      ZINGME: '🎁 Đổi ZINGME: +3,000 Vàng, +300 Xu Vinh Quang, +5 Bùa & Mở khóa Cửu Vĩ Thiên Hồ!',
+      ZINGME: '🎁 Đổi ZINGME: +3,000 Vàng, +300 Xu Vinh Quang, +4 Đá C4, +2 Đá C5 & Mở khóa Cửu Vĩ Thiên Hồ!',
       VIP999: '🎁 Đổi VIP999: +10,000 Vàng, +100 Đá, +2,000 Xu Vinh Quang, +15 Gen T2 & Đá C4-C5!',
       FULLPET: `🎁 Đổi FULLPET: Mở khóa toàn bộ ${STARTER_PETS.length}/${STARTER_PETS.length} Pet Độc Lập Pokiwar 4.0 (Tối thiểu Lv.10)!`,
     };
@@ -2308,26 +2289,22 @@ export function App() {
     }
     setProgress((p) => {
       const bag = [...(p.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-      const charms = { ...(p.charms ?? { binhAn: 2, mayMan: 2 }) };
       const shards = { ...(p.petShards ?? {}) };
       let genCores = p.genCores ?? 0;
       if (offer.kind === 'SHARD' && offer.petId) {
         shards[offer.petId] = (shards[offer.petId] ?? 0) + offer.amount;
-      } else if (offer.kind === 'CHARM') {
-        charms.binhAn += offer.amount;
-        charms.mayMan += offer.amount;
+      } else if (offer.kind === 'STONE_LV4') {
+        bag[3] = (bag[3] ?? 0) + offer.amount;
       } else if (offer.kind === 'GEN_CORE') {
         genCores += offer.amount;
       } else if (offer.kind === 'STONE_LV5') {
         bag[4] = (bag[4] ?? 0) + offer.amount;
-        charms.binhAn += 2;
       }
       return {
         ...p,
         gold: p.gold - offer.finalGold,
         genCores,
         stoneBag: bag,
-        charms,
         petShards: shards,
       };
     });
@@ -2360,7 +2337,7 @@ export function App() {
     const shardAdds: Record<string, number> = {};
     const unlockedAdds: string[] = [];
     let extraGen = 0;
-    let extraCharms = 0;
+    let extraStone4 = 0;
     let extraStone5 = 0;
     let jackpotName: string | null = null;
 
@@ -2390,18 +2367,16 @@ export function App() {
           extraStone5 += 2;
           results.push({ label: '+2 Đá Nâng Cấp C5', icon: '/assets/pokiguard/sprites/stone_m_5.png', rarity: 'EPIC' });
         } else {
-          extraCharms += 3;
-          results.push({ label: '+3 Bùa Bình An & May Mắn', icon: '/assets/pokiguard/sprites/charm_may_man.png', rarity: 'EPIC' });
+          extraStone4 += 3;
+          results.push({ label: '+3 Đá Nâng Cấp C4', icon: '/assets/pokiguard/sprites/stone_m_4.png', rarity: 'EPIC' });
         }
       }
     }
 
     setProgress((p) => {
       const bag = [...(p.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
+      bag[3] = (bag[3] ?? 0) + extraStone4;
       bag[4] = (bag[4] ?? 0) + extraStone5;
-      const charms = { ...(p.charms ?? { binhAn: 2, mayMan: 2 }) };
-      charms.binhAn += extraCharms;
-      charms.mayMan += extraCharms;
       const shards = { ...(p.petShards ?? {}) };
       for (const [pid, amt] of Object.entries(shardAdds)) {
         shards[pid] = (shards[pid] ?? 0) + amt;
@@ -2419,7 +2394,6 @@ export function App() {
         gold: p.gold - goldCost,
         gloryCoins: (p.gloryCoins ?? 0) - gloryCost,
         genCores: (p.genCores ?? 0) + extraGen,
-        charms,
         stoneBag: bag,
         petShards: shards,
         unlockedPets: unlocked,
@@ -2657,9 +2631,23 @@ export function App() {
         {screen === 'BATTLE' && (
           <div
             className="hud-telemetry"
-            style={{ top: 68, left: '50%', right: 'auto', transform: 'translateX(-50%)', opacity: 0.72, fontSize: 10, padding: '1px 7px' }}
+            style={{
+              top: 66,
+              left: 12,
+              right: 'auto',
+              zIndex: 25,
+              background: 'transparent',
+              border: 'none',
+              boxShadow: 'none',
+              opacity: 0.92,
+              fontSize: 11.5,
+              fontWeight: 900,
+              color: '#f8fafc',
+              textShadow: '0 1.5px 3px #000',
+              padding: 0,
+            }}
           >
-            Ping: {pingMs ?? (battleMode === 'PVP' ? '...' : 0)} ms | FPS: {fps}
+            Ping: {pingMs ?? (battleMode === 'PVP' ? '...' : 12)} ms | FPS: {fps}
           </div>
         )}
 
@@ -2761,31 +2749,20 @@ export function App() {
                 return { ...p, gold: p.gold - costGold, stoneBag: bag };
               })
             }
-            onBuyCharm={(kind, costGold) =>
-              setProgress((p) => {
-                if (p.gold < costGold) return p;
-                const charms = { ...(p.charms ?? { binhAn: 2, mayMan: 2 }) };
-                charms[kind] += 1;
-                return { ...p, gold: p.gold - costGold, charms };
-              })
-            }
             onSpinWheel={(prize: WheelPrizeDef, goldCost: number) =>
               setProgress((p) => {
                 if (p.gold < goldCost) return p;
                 const bag = [...(p.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-                const charms = { ...(p.charms ?? { binhAn: 2, mayMan: 2 }) };
                 let gold = p.gold - goldCost;
                 if (prize.kind === 'GOLD') gold += prize.amount;
                 if (prize.kind === 'STONE_LV2') bag[1] += prize.amount;
                 if (prize.kind === 'STONE_LV3') bag[2] += prize.amount;
                 if (prize.kind === 'STONE_LV4') bag[3] += prize.amount;
-                if (prize.kind === 'CHARM_BINH_AN') charms.binhAn += prize.amount;
-                if (prize.kind === 'CHARM_MAY_MAN') charms.mayMan += prize.amount;
+                if (prize.kind === 'STONE_LV5') bag[4] += prize.amount;
                 return {
                   ...p,
                   gold,
                   stoneBag: bag,
-                  charms,
                   wheelSpunCount: (p.wheelSpunCount ?? 0) + 1,
                 };
               })
@@ -2794,7 +2771,6 @@ export function App() {
               setProgress((p) => {
                 if (p.gold < goldCost) return p;
                 const bag = [...(p.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-                const charms = { ...(p.charms ?? { binhAn: 2, mayMan: 2 }) };
                 const shards = { ...(p.petShards ?? {}) };
                 let gold = p.gold - goldCost;
                 const prevSpuns = p.wheelSpunCount ?? 0;
@@ -2804,8 +2780,7 @@ export function App() {
                   if (prize.kind === 'STONE_LV2') bag[1] += prize.amount;
                   if (prize.kind === 'STONE_LV3') bag[2] += prize.amount;
                   if (prize.kind === 'STONE_LV4') bag[3] += prize.amount;
-                  if (prize.kind === 'CHARM_BINH_AN') charms.binhAn += prize.amount;
-                  if (prize.kind === 'CHARM_MAY_MAN') charms.mayMan += prize.amount;
+                  if (prize.kind === 'STONE_LV5') bag[4] += prize.amount;
                 }
                 if (Math.floor(nextSpuns / 30) > Math.floor(prevSpuns / 30)) {
                   shards['pet-mega-zidarose'] = (shards['pet-mega-zidarose'] ?? 0) + 15;
@@ -2814,7 +2789,6 @@ export function App() {
                   ...p,
                   gold,
                   stoneBag: bag,
-                  charms,
                   petShards: shards,
                   wheelSpunCount: nextSpuns,
                 };
@@ -2824,7 +2798,6 @@ export function App() {
               setProgress((p) => {
                 if (p.gold < goldCost || p.stones < stoneCost) return p;
                 const bag = [...(p.stoneBag ?? [8, 4, 2, 1, 0])] as [number, number, number, number, number];
-                const charms = { ...(p.charms ?? { binhAn: 2, mayMan: 2 }) };
                 const shards = { ...(p.petShards ?? {}) };
                 const unlocked = [...(p.unlockedPets ?? [p.selectedPetId, 'pet-583', 'pet-1431', 'pet-725'])];
                 const petLevels = { ...p.petLevels };
@@ -2834,8 +2807,7 @@ export function App() {
                   if (d.kind === 'STONE_LV2') bag[1] += d.amount;
                   if (d.kind === 'STONE_LV3') bag[2] += d.amount;
                   if (d.kind === 'STONE_LV4') bag[3] += d.amount;
-                  if (d.kind === 'CHARM_BINH_AN') charms.binhAn += d.amount;
-                  if (d.kind === 'CHARM_MAY_MAN') charms.mayMan += d.amount;
+                  if (d.kind === 'STONE_LV5') bag[4] += d.amount;
                   if (d.kind === 'SHARD' && d.petId) {
                     shards[d.petId] = (shards[d.petId] ?? 0) + d.amount;
                   }
@@ -2853,7 +2825,6 @@ export function App() {
                   gold,
                   stones: p.stones - stoneCost,
                   stoneBag: bag,
-                  charms,
                   petShards: shards,
                   unlockedPets: unlocked,
                   petLevels,
@@ -2957,6 +2928,8 @@ export function App() {
             onOverlayPauseChange={setOverlayPaused}
             mercenaryCount={battleMode === 'PVE' ? activeMercenaryCount : 0}
             playerGold={progress.gold}
+            battleSpeed={battleSpeed}
+            onToggleSpeed={() => setBattleSpeed((s) => (s === 1 ? 2 : 1))}
             onClaimFlipReward={handleClaimFlipReward}
           />
         )}

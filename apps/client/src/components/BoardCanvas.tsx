@@ -34,9 +34,9 @@ interface BoardCanvasProps {
   onSwap: (from: Pos, to: Pos) => void;
 }
 
-const CELL_SIZE = 46;
+const CELL_SIZE = 52;
 const PADDING = 4;
-const BOARD_PX = CELL_SIZE * 8 + PADDING * 2; // 376x376 tight Pokiwar grid
+const BOARD_PX = CELL_SIZE * 8 + PADDING * 2; // 424x424 PokiGuard 16:9 authentic board scale
 
 const GEM_HEX_COLOR: Record<GemType, number> = {
   SWORD: 0xfacc15,
@@ -98,22 +98,33 @@ function createGemSpriteNode(type: GemType, multiplier = 1): Container {
   container.addChild(sprite);
 
   if (multiplier > 1) {
-    // Classic Pokiwar Zing Me crisp corner multiplier ("x2" / "x3" / "x4") with thick black outline — no bulky box!
-    const fillHex = multiplier >= 4 ? 0xfb7185 : multiplier === 3 ? 0xfb923c : 0xfef08a;
+    // Authentic PokiGuard crisp bottom-right multiplier ("x2".."x7") with thick dark outline!
+    const fillHex =
+      multiplier >= 7
+        ? 0x67e8f9
+        : multiplier === 6
+          ? 0xe879f9
+          : multiplier === 5
+            ? 0xfb7185
+            : multiplier === 4
+              ? 0xfb923c
+              : multiplier === 3
+                ? 0xfef08a
+                : 0xffffff;
     const label = new PixiText(`x${multiplier}`, {
       fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: 13.5,
+      fontSize: multiplier >= 5 ? 16 : 15,
       fontWeight: '900',
       fill: fillHex,
-      stroke: 0x111827,
-      strokeThickness: 3.8,
+      stroke: 0x0b1120,
+      strokeThickness: 4.2,
       dropShadow: true,
       dropShadowColor: 0x000000,
-      dropShadowDistance: 1.5,
-      dropShadowBlur: 2,
+      dropShadowDistance: 1.8,
+      dropShadowBlur: 2.2,
     });
     label.anchor.set(1, 1);
-    label.position.set(CELL_SIZE * 0.44, CELL_SIZE * 0.46);
+    label.position.set(CELL_SIZE * 0.46, CELL_SIZE * 0.47);
     container.addChild(label);
   }
   return container;
@@ -244,23 +255,23 @@ export function BoardCanvas({
 
     const bgLayer = new Container();
     const boardPlate = new Graphics();
-    boardPlate.lineStyle(2, 0x38bdf8, 0.55);
-    boardPlate.beginFill(0x051229, 0.94);
-    boardPlate.drawRoundedRect(1, 1, BOARD_PX - 2, BOARD_PX - 2, 10);
+    boardPlate.lineStyle(2, 0x38bdf8, 0.78);
+    boardPlate.beginFill(0x061630, 0.72);
+    boardPlate.drawRoundedRect(1, 1, BOARD_PX - 2, BOARD_PX - 2, 12);
     boardPlate.endFill();
     bgLayer.addChild(boardPlate);
 
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const tile = new Graphics();
-        tile.lineStyle(0.8, 0x1e3a5f, 0.45);
-        tile.beginFill((r + c) % 2 === 0 ? 0x0a2246 : 0x071833, 0.92);
+        tile.lineStyle(0.8, 0x38bdf8, 0.22);
+        tile.beginFill((r + c) % 2 === 0 ? 0x0b254a : 0x071a36, 0.66);
         tile.drawRoundedRect(
-          PADDING + c * CELL_SIZE + 0.5,
-          PADDING + r * CELL_SIZE + 0.5,
-          CELL_SIZE - 1,
-          CELL_SIZE - 1,
-          5,
+          PADDING + c * CELL_SIZE + 1,
+          PADDING + r * CELL_SIZE + 1,
+          CELL_SIZE - 2,
+          CELL_SIZE - 2,
+          6,
         );
         tile.endFill();
         bgLayer.addChild(tile);

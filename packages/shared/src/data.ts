@@ -14,15 +14,10 @@ export const EVOLUTION_CHAIN: readonly EvolutionTier[] = [
 
 export const STONE_PRICES = [50, 100, 150, 250, 400] as const;
 
-export const CHARM_PRICES = {
-  binhAn: 350,
-  mayMan: 650,
-} as const;
-
 export interface WheelPrizeDef {
   id: string;
   label: string;
-  kind: 'GOLD' | 'STONE_LV2' | 'STONE_LV3' | 'STONE_LV4' | 'CHARM_BINH_AN' | 'CHARM_MAY_MAN';
+  kind: 'GOLD' | 'STONE_LV2' | 'STONE_LV3' | 'STONE_LV4' | 'STONE_LV5';
   amount: number;
   icon: string;
   color: string;
@@ -31,10 +26,10 @@ export interface WheelPrizeDef {
 export const WHEEL_PRIZES: readonly WheelPrizeDef[] = [
   { id: 'w1', label: '+400 Vàng', kind: 'GOLD', amount: 400, icon: '/assets/pokiguard/sprites/gold.png', color: '#f59e0b' },
   { id: 'w2', label: '+3 Đá Cấp 2', kind: 'STONE_LV2', amount: 3, icon: '/assets/pokiguard/sprites/stone_f_2.png', color: '#3b82f6' },
-  { id: 'w3', label: '+1 Bùa Bình An', kind: 'CHARM_BINH_AN', amount: 1, icon: '/assets/pokiguard/sprites/charm_binh_an.png', color: '#22c55e' },
+  { id: 'w3', label: '+2 Đá Cấp 3', kind: 'STONE_LV3', amount: 2, icon: '/assets/pokiguard/sprites/stone_e_3.png', color: '#22c55e' },
   { id: 'w4', label: '+900 Vàng', kind: 'GOLD', amount: 900, icon: '/assets/pokiguard/sprites/gold.png', color: '#eab308' },
   { id: 'w5', label: '+2 Đá Cấp 3', kind: 'STONE_LV3', amount: 2, icon: '/assets/pokiguard/sprites/stone_w_3.png', color: '#06b6d4' },
-  { id: 'w6', label: '+1 Bùa May Mắn', kind: 'CHARM_MAY_MAN', amount: 1, icon: '/assets/pokiguard/sprites/charm_may_man.png', color: '#a855f7' },
+  { id: 'w6', label: '+1 Đá Cấp 5', kind: 'STONE_LV5', amount: 1, icon: '/assets/pokiguard/sprites/stone_m_5.png', color: '#a855f7' },
   { id: 'w7', label: '+2 Đá Cấp 4', kind: 'STONE_LV4', amount: 2, icon: '/assets/pokiguard/sprites/stone_m_4.png', color: '#ec4899' },
   { id: 'w8', label: '+1800 Vàng', kind: 'GOLD', amount: 1800, icon: '/assets/pokiguard/sprites/gold.png', color: '#ef4444' },
 ];
@@ -621,7 +616,7 @@ const RAW_STARTER_PETS: PetDef[] = [
     name: 'Blastray',
     title: 'Hệ Hỏa • Boss Huyền Thoại Hỏa Ngục',
     element: 'HOA',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: {
       requiredPetId: 'pet-mega-icarus',
       requiredPetLevel: 8,
@@ -1543,7 +1538,7 @@ const RAW_STARTER_PETS: PetDef[] = [
     name: 'Phong Thần Hiền Giả',
     title: 'Hệ Mộc • Liệt Không Phù Sư',
     element: 'MOC',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: {
       requiredPetId: 'pet-mega-elpidios',
       requiredPetLevel: 8,
@@ -1614,7 +1609,7 @@ const RAW_STARTER_PETS: PetDef[] = [
     name: 'Ám Long Lucifer',
     title: 'Hệ Thổ • Hắc Dực Kiếm Đế',
     element: 'THO',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: {
       requiredPetId: 'pet-1350',
       requiredPetLevel: 9,
@@ -1974,11 +1969,11 @@ const RAW_STARTER_PETS: PetDef[] = [
   {
     id: 'pet-2449',
     spriteId: '2449',
-    evolutionSprites: { ANCIENT: '2449' },
+    evolutionSprites: { LEGEND: '2449' },
     name: 'Boss Rattan',
-    title: 'Hệ Mộc • Liệt Không Thần Long',
+    title: 'Hệ Mộc • Huyền Thoại Liệt Không Long',
     element: 'MOC',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: {
       requiredPetId: 'pet-2273',
       requiredPetLevel: 10,
@@ -2024,7 +2019,7 @@ const RAW_STARTER_PETS: PetDef[] = [
       {
         id: 'sk-2449-3',
         name: 'Họa Long Điểm Tinh',
-        description: 'Tuyệt kỹ Ancient Rayquaza: gây 3.1x sát thương Phép và phủ ngọc x2/x3 lên bàn cờ!',
+        description: 'Tuyệt kỹ Huyền Thoại Boss Rattan: gây 3.1x sát thương Phép và phủ ngọc x2/x3 lên bàn cờ!',
         rageCost: 150,
         manaCost: 195,
         cooldown: 2,
@@ -2038,11 +2033,11 @@ const RAW_STARTER_PETS: PetDef[] = [
   {
     id: 'pet-2279',
     spriteId: '2279',
-    evolutionSprites: { ANCIENT: '2279' },
+    evolutionSprites: { LEGEND: '2279' },
     name: 'Amaterasu Cửu Vĩ',
     title: 'Hệ Hỏa • Thái Cực Thiên Hồ',
     element: 'HOA',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: {
       requiredPetId: 'pet-1461',
       requiredPetLevel: 9,
@@ -2180,11 +2175,11 @@ const RAW_STARTER_PETS: PetDef[] = [
   {
     id: 'pet-2440',
     spriteId: '2440',
-    evolutionSprites: { ANCIENT: '2440' },
+    evolutionSprites: { LEGEND: '2440' },
     name: 'Hắc Xà Apophis',
     title: 'Hệ Thổ • Ám Dạ Ma Quân',
     element: 'THO',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: {
       requiredPetId: 'pet-1204',
       requiredPetLevel: 8,
@@ -2817,11 +2812,11 @@ const RAW_STARTER_PETS: PetDef[] = [
   {
     id: 'pet-boss-spetra',
     spriteId: '2440',
-    evolutionSprites: { ANCIENT: '2440' },
+    evolutionSprites: { LEGEND: '2440' },
     name: 'Boss Spetra',
-    title: 'Siêu Boss Đảo 6 • Ma Vương Hư Không • Pokiwar 4.0',
+    title: 'Huyền Thoại Đảo 6 • Ma Vương Hư Không • Pokiwar 4.0',
     element: 'THO',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     passiveSkill: { name: 'Ma Thần Bất Diệt', description: 'Tự động Hồi Sinh 1 lần mỗi trận với 42% HP & Giáp Ma Thần!', kind: 'HOI_SINH', value: 1 },
     maxHp: 2350,
     attack: 222,
@@ -3795,11 +3790,11 @@ const RAW_STARTER_PETS: PetDef[] = [
   {
     id: 'pet-primal-orithyia',
     spriteId: 'pw_primal_orithyia',
-    evolutionSprites: { ANCIENT: 'pw_primal_orithyia' },
+    evolutionSprites: { LEGEND: 'pw_primal_orithyia' },
     name: 'Primal Orithyia',
-    title: 'Primal • Tiến Hóa Nguyên Thủy 150%',
+    title: 'Huyền Thoại Primal • Băng Ngục Nguyên Thủy',
     element: 'THUY',
-    tier: 'ANCIENT',
+    tier: 'LEGEND',
     synthesisRecipe: { requiredPetId: 'pet-galaxy-aquar', requiredPetLevel: 10, stoneLevel: 5, stoneCount: 4, goldCost: 2900 },
     passiveSkill: { name: 'Nguyên Thủy Bất Diệt', description: 'Tự động Hồi Sinh 1 lần mỗi trận với 42% HP & Giáp Cổ Đại!', kind: 'HOI_SINH', value: 1 },
     maxHp: 2260,
@@ -3992,6 +3987,111 @@ const RAW_STARTER_PETS: PetDef[] = [
       },
     ],
   },
+  // ==================== DÒNG PET ANCIENT (CỔ ĐẠI) CHUẨN POKIWAR 4.0 ZING ME ====================
+  {
+    id: 'pet-ancient-arceus',
+    spriteId: 'pw_ancient_arceus',
+    evolutionSprites: { ANCIENT: 'pw_ancient_arceus' },
+    name: 'Ancient Arceus',
+    title: 'Ancient A1 • Hệ Kim • Thần Sáng Thế Cổ Đại',
+    element: 'KIM',
+    tier: 'ANCIENT',
+    synthesisRecipe: {
+      requiredPetId: 'pet-galaxy-god',
+      requiredPetLevel: 12,
+      stoneLevel: 5,
+      stoneCount: 5,
+      goldCost: 4200,
+    },
+    passiveSkill: {
+      name: 'Thần Thể Cổ Đại (A1)',
+      description: 'Miễn nhiễm Độc/Thiêu Đốt/Choáng/Phản Đòn, +450 Giáp mở trận; kéo 3–6 ngọc tự nổ lan, tích lũy HP/Công, hồi máu & gieo Vết Thương Sâu (+20% ST nhận)!',
+      kind: 'XUYEN_GIAP',
+      value: 0.45,
+    },
+    maxHp: 2940,
+    attack: 286,
+    magic: 288,
+    defense: 196,
+    speed: 146,
+    maxRage: 250,
+    colorPrimary: '#facc15',
+    colorSecondary: '#38bdf8',
+    skills: [
+      {
+        id: 'sk-anc-arceus',
+        name: 'Thẻ Ancient Arceus • Thiên Phán',
+        description: 'Kéo ngọc tự nổ lan (3–6 viên) & tích lũy Cổ Đại; tung Thẻ phong ấn vùng 5×5 hóa ngọc x2–x4, gây 3.45x Phép + Vết Thương Sâu (+20% ST nhận, 2 lượt), 40% Choáng & hồi 25% HP!',
+        rageCost: 110,
+        manaCost: 160,
+        cooldown: 2,
+        powerRatio: 3.45,
+        damageKind: 'MAGIC',
+        cardImage: '/assets/pokiguard/pets/pw_ancient_arceus.png',
+        isSpecialCard: true,
+        specialPassiveNote: 'Chuẩn Pokiwar 4.0 (A1): Kháng Độc/Đốt/Choáng/Phản Đòn, nổ lan bàn cờ, tích lũy HP/Công, Vết Thương Sâu (+20% ST nhận) & hồi 8%–22% HP mỗi lượt kéo ngọc!',
+        boardEffect: 'SEAL_REGION',
+        spawnMultipliersAfter: true,
+        armorPierceRatio: 0.45,
+        healPercentMaxHp: 0.25,
+        shieldAmount: 360,
+        cleanseDebuffs: true,
+        statusEffect: { kind: 'DEEP_WOUND', value: 2, durationTurns: 2 },
+        gemRequirement: { count: 6, mode: 'UNLOCK_CARD', label: 'Ăn 6 Ngọc' },
+      },
+    ],
+  },
+  {
+    id: 'pet-ancient-rayquaza',
+    spriteId: 'pw_ancient_rayquaza',
+    evolutionSprites: { ANCIENT: 'pw_ancient_rayquaza' },
+    name: 'Ancient Rayquaza',
+    title: 'Ancient A3 • Hệ Mộc • Vị Thần Tê Liệt',
+    element: 'MOC',
+    tier: 'ANCIENT',
+    synthesisRecipe: {
+      requiredPetId: 'pet-2449',
+      requiredPetLevel: 12,
+      stoneLevel: 5,
+      stoneCount: 6,
+      goldCost: 4800,
+    },
+    passiveSkill: {
+      name: 'Long Thần Bất Diệt (A3)',
+      description: 'Hồi Sinh 1 lần (42% HP), kháng Độc/Thiêu Đốt/Choáng/Phản Đòn, giảm 20% ST nhận, đòn thứ 5 gây 150% ST; kéo ngọc nổ lan, Xuyên Thấu & Tê Liệt tới 100%!',
+      kind: 'HOI_SINH',
+      value: 1,
+    },
+    maxHp: 3040,
+    attack: 294,
+    magic: 292,
+    defense: 202,
+    speed: 150,
+    maxRage: 250,
+    colorPrimary: '#10b981',
+    colorSecondary: '#facc15',
+    skills: [
+      {
+        id: 'sk-anc-rayquaza',
+        name: 'Thẻ Ancient Rayquaza • Liệt Không',
+        description: 'Kéo ngọc tự nổ lan (3–6 viên), Xuyên Thấu & Tê Liệt tới 100%; tung Thẻ thả 3 Bom 3×3 quét bàn cờ, gây 3.55x Phép xuyên 65% Giáp & Tê Liệt 1 lượt!',
+        rageCost: 110,
+        manaCost: 160,
+        cooldown: 2,
+        powerRatio: 3.55,
+        damageKind: 'MAGIC',
+        cardImage: '/assets/pokiguard/pets/pw_ancient_rayquaza.png',
+        isSpecialCard: true,
+        specialPassiveNote: 'Chuẩn Pokiwar 4.0 (A3): Vị Thần Tê Liệt — Hồi sinh 1 lần, giảm 20% ST nhận, đòn thứ 5 gây 150% ST, nổ lan bàn cờ, tích lũy HP/Công & Tê Liệt tới 100%!',
+        boardEffect: 'BOMB_3X3',
+        armorPierceRatio: 0.65,
+        shieldAmount: 380,
+        cleanseDebuffs: true,
+        statusEffect: { kind: 'STUN', value: 1, durationTurns: 1 },
+        gemRequirement: { count: 6, mode: 'UNLOCK_CARD', label: 'Ăn 6 Ngọc' },
+      },
+    ],
+  },
 ];
 
 function defaultPassiveForTier(pet: PetDef): PetDef['passiveSkill'] {
@@ -4035,15 +4135,15 @@ const TIER_STAT_BANDS: Record<
   EvolutionTier,
   { hp: [number, number]; atk: [number, number]; mag: [number, number]; def: [number, number]; spd: [number, number] }
 > = {
-  BASE: { hp: [1120, 1360], atk: [110, 140], mag: [105, 138], def: [76, 102], spd: [88, 108] },
-  S: { hp: [1380, 1640], atk: [138, 170], mag: [132, 168], def: [96, 122], spd: [100, 118] },
-  LEGEND: { hp: [1680, 1980], atk: [170, 202], mag: [165, 200], def: [115, 140], spd: [110, 128] },
-  MECH: { hp: [1740, 2020], atk: [176, 208], mag: [170, 204], def: [120, 144], spd: [112, 130] },
-  MEGA: { hp: [1920, 2260], atk: [192, 226], mag: [188, 224], def: [130, 158], spd: [116, 134] },
-  GALAXY: { hp: [2240, 2620], atk: [220, 258], mag: [216, 256], def: [148, 178], spd: [124, 142] },
-  ANCIENT: { hp: [2520, 2920], atk: [244, 282], mag: [240, 280], def: [166, 196], spd: [130, 148] },
-  FANTASY: { hp: [2780, 3120], atk: [266, 298], mag: [262, 296], def: [180, 210], spd: [136, 152] },
-  TITAN: { hp: [2650, 3020], atk: [255, 290], mag: [250, 288], def: [174, 202], spd: [132, 148] },
+  BASE: { hp: [1120, 1360], atk: [112, 140], mag: [108, 138], def: [78, 102], spd: [88, 108] },
+  S: { hp: [1400, 1640], atk: [140, 170], mag: [136, 168], def: [98, 122], spd: [100, 118] },
+  LEGEND: { hp: [1720, 1960], atk: [174, 200], mag: [170, 202], def: [118, 142], spd: [112, 130] },
+  MECH: { hp: [1750, 1940], atk: [176, 198], mag: [172, 196], def: [120, 140], spd: [114, 128] },
+  MEGA: { hp: [2040, 2280], atk: [204, 232], mag: [200, 230], def: [138, 160], spd: [122, 136] },
+  GALAXY: { hp: [2360, 2660], atk: [232, 264], mag: [228, 264], def: [156, 182], spd: [128, 144] },
+  FANTASY: { hp: [2740, 2740], atk: [268, 268], mag: [268, 268], def: [184, 184], spd: [145, 145] },
+  ANCIENT: { hp: [2940, 3040], atk: [286, 294], mag: [288, 292], def: [196, 202], spd: [146, 150] },
+  TITAN: { hp: [2820, 2920], atk: [274, 284], mag: [274, 284], def: [188, 196], spd: [144, 148] },
 };
 
 const RAW_TIER_RANGES: Partial<
@@ -4084,20 +4184,372 @@ const SPECIAL_SKILL_TIERS: ReadonlySet<EvolutionTier> = new Set([
   'TITAN',
 ]);
 
+/**
+ * Authentic Pokiwar / PokiGuard skill trigger & activation rules verified from YouTube gameplay:
+ * - Only a small subset of pets require 4-arrow Audition QTE (`needPerfection: true`).
+ * - Several Galaxy/Fantasy/Boss pets unlock or auto-trigger via gem collection (`gemRequirement`).
+ * - Board-pick pets (Zidarose, Elpidios, Zero, Hyon, Fireware, Issylt) pick rows/tiles directly (no QTE).
+ * - Other Megas/Galaxies cast directly once Rage & Mana are filled (no QTE).
+ */
+const AUTHENTIC_QTE_PETS: ReadonlySet<string> = new Set([
+  'pet-mega-prysma',
+  'pet-primal-orithyia',
+  'pet-boss-humex',
+]);
+
+const AUTHENTIC_GEM_REQUIREMENTS: Record<string, SkillDef['gemRequirement']> = {
+  'pet-galaxy-shadow-sword': {
+    gemType: 'SWORD',
+    count: 9,
+    mode: 'AUTO_TRIGGER',
+    label: 'Tụ Lực 9 Kiếm',
+  },
+  'pet-fantasy-joker': {
+    count: 10,
+    mode: 'UNLOCK_CARD',
+    label: 'Tích 10 Ấn Ngọc',
+  },
+  'pet-3090': {
+    gemType: 'FIRE',
+    count: 5,
+    mode: 'UNLOCK_CARD',
+    label: 'Ăn 5 Ngọc Lửa',
+  },
+  'pet-galaxy-fairy': {
+    gemType: 'YINYANG',
+    count: 6,
+    mode: 'UNLOCK_CARD',
+    label: 'Ăn 6 Ngọc Khiên',
+  },
+  'pet-galaxy-god': {
+    gemType: 'HEART',
+    count: 5,
+    mode: 'UNLOCK_CARD',
+    label: 'Ăn 5 Ngọc Tim',
+  },
+  'pet-boss-spetra': {
+    gemType: 'FIRE',
+    count: 5,
+    mode: 'UNLOCK_CARD',
+    label: 'Ăn 5 Ngọc Lửa',
+  },
+  'pet-boss-axcel': {
+    gemType: 'SWORD',
+    count: 6,
+    mode: 'UNLOCK_CARD',
+    label: 'Ăn 6 Ngọc Kiếm',
+  },
+};
+
+/**
+ * Precision Pokiwar 4.0 Master Balance Table:
+ * Ensures authentic lore power hierarchy (FANTASY > ANCIENT > GALAXY G7/G6/G8..G1 > MEGA > LEGEND/MECH > S > BASE),
+ * fixes underpowered legends like Galaxy Chess Master (G6), Mega Zidarose, Mega Hyon, Kassadin, Galaxy Glank & Risky,
+ * and ensures fair skill cost-to-impact ratios across all 70 pets.
+ */
+interface PetBalancePatch {
+  maxHp?: number;
+  attack?: number;
+  magic?: number;
+  defense?: number;
+  speed?: number;
+  skill?: Partial<SkillDef>;
+}
+
+const PET_BALANCE_OVERRIDES: Record<string, PetBalancePatch> = {
+  // === ANCIENT TIER (True Pokiwar 4.0 Ancient Gods: A3 Rayquaza > A1 Arceus > Fantasy F1) ===
+  'pet-ancient-rayquaza': {
+    maxHp: 3040,
+    attack: 294,
+    magic: 292,
+    defense: 202,
+    speed: 150,
+    skill: {
+      powerRatio: 3.55,
+      rageCost: 110,
+      manaCost: 160,
+      armorPierceRatio: 0.65,
+      shieldAmount: 380,
+    },
+  },
+  'pet-ancient-arceus': {
+    maxHp: 2940,
+    attack: 286,
+    magic: 288,
+    defense: 196,
+    speed: 146,
+    skill: {
+      powerRatio: 3.45,
+      rageCost: 110,
+      manaCost: 160,
+      armorPierceRatio: 0.45,
+      healPercentMaxHp: 0.25,
+      shieldAmount: 360,
+    },
+  },
+  // === FANTASY F1 (Above Galaxy G7, Right Below Ancient A1/A3) ===
+  'pet-fantasy-joker': {
+    maxHp: 2740,
+    attack: 268,
+    magic: 268,
+    defense: 184,
+    speed: 145,
+    skill: {
+      powerRatio: 3.35,
+      rageCost: 100,
+      manaCost: 180,
+      armorPierceRatio: 0.28,
+      lifestealRatio: 0.16,
+      shieldAmount: 400,
+    },
+  },
+  // === GALAXY TIER (Faithful G7 / G6 / G8 / G5 / G4 / G3 / G2 / G1 Hierarchy) ===
+  'pet-galaxy-god': {
+    maxHp: 2640,
+    attack: 258,
+    magic: 264,
+    defense: 176,
+    speed: 142,
+    skill: { powerRatio: 3.25, rageCost: 130, manaCost: 180, healPercentMaxHp: 0.16, shieldAmount: 320 },
+  },
+  'pet-3090': {
+    // Galaxy Chess Master (G6): Elevated to Top-3 Galaxy Legend with authentic Chiếu Bí + Phong Hậu + Nước Cờ stacking!
+    maxHp: 2610,
+    attack: 250,
+    magic: 264,
+    defense: 174,
+    speed: 141,
+    skill: {
+      powerRatio: 3.2,
+      rageCost: 100,
+      manaCost: 180,
+      consumeGemTypes: ['FIRE', 'SWORD'],
+      healPercentMaxHp: 0.12,
+      maxHpBoostPercent: 0.1,
+      armorPierceRatio: 0.22,
+      specialPassiveNote: 'Nước Cờ: Mỗi lần Chiếu Bí tăng +18% sát thương (tối đa ×5 = +90%) + Phong Hậu +10% Max HP!',
+    },
+  },
+  'pet-galaxy-fairy': {
+    maxHp: 2590,
+    attack: 244,
+    magic: 264,
+    defense: 170,
+    speed: 143,
+    skill: { powerRatio: 3.2, rageCost: 130, manaCost: 180, healPercentMaxHp: 0.22, cleanseDebuffs: true },
+  },
+  'pet-galaxy-shadow-sword': {
+    maxHp: 2560,
+    attack: 264,
+    magic: 242,
+    defense: 166,
+    speed: 144,
+    skill: { powerRatio: 2.95, rageCost: 0, manaCost: 140, lifestealRatio: 0.18 },
+  },
+  'pet-galaxy-aquar': {
+    maxHp: 2540,
+    attack: 248,
+    magic: 260,
+    defense: 170,
+    speed: 140,
+    skill: { powerRatio: 3.05, rageCost: 140, manaCost: 180, shieldAmount: 320 },
+  },
+  'pet-galaxy-dragon-knight': {
+    maxHp: 2540,
+    attack: 254,
+    magic: 254,
+    defense: 172,
+    speed: 140,
+    skill: { powerRatio: 3.05, rageCost: 130, manaCost: 180, manaRefund: 120, healPercentMaxHp: 0.14 },
+  },
+  'pet-galaxy-glank': {
+    maxHp: 2660,
+    attack: 248,
+    magic: 232,
+    defense: 182,
+    speed: 130,
+    skill: { powerRatio: 2.85, rageCost: 150, manaCost: 180, manaRefund: 100, shieldAmount: 420 },
+  },
+  'pet-galaxy-risky': {
+    maxHp: 2480,
+    attack: 246,
+    magic: 256,
+    defense: 164,
+    speed: 142,
+    skill: { powerRatio: 2.9, rageCost: 150, manaCost: 180 },
+  },
+  'pet-galaxy-blume': {
+    maxHp: 2460,
+    attack: 236,
+    magic: 258,
+    defense: 162,
+    speed: 143,
+    skill: { powerRatio: 3.0, rageCost: 140, manaCost: 180, healPercentMaxHp: 0.14 },
+  },
+  // === MEGA TIER (All 12 Iconic Megas Balanced Tightly at Top of Mega Tier!) ===
+  'pet-mega-icarus': {
+    maxHp: 2180,
+    attack: 232,
+    magic: 216,
+    defense: 146,
+    speed: 136,
+    skill: { powerRatio: 2.85, rageCost: 100, manaCost: 200 },
+  },
+  'pet-mega-ahrina': {
+    maxHp: 2180,
+    attack: 230,
+    magic: 220,
+    defense: 148,
+    speed: 135,
+    skill: { powerRatio: 2.85, rageCost: 140, manaCost: 180, healPercentMaxHp: 0.12 },
+  },
+  'pet-mega-zidarose': {
+    maxHp: 2210,
+    attack: 228,
+    magic: 214,
+    defense: 150,
+    speed: 132,
+    skill: { powerRatio: 2.35, rageCost: 0, manaCost: 200, cooldown: 2 },
+  },
+  'pet-mega-prysma': {
+    maxHp: 2200,
+    attack: 216,
+    magic: 228,
+    defense: 154,
+    speed: 130,
+    skill: { powerRatio: 3.1, rageCost: 140, manaCost: 180, manaRefund: 110 },
+  },
+  'pet-mega-twinflame': {
+    maxHp: 2190,
+    attack: 226,
+    magic: 226,
+    defense: 146,
+    speed: 134,
+    skill: {
+      powerRatio: 3.05,
+      rageCost: 140,
+      manaCost: 180,
+      specialPassiveNote: 'Thăng Hoa: Mỗi lần tung chiêu tăng +14% sát thương (tối đa 5 tầng) + sinh ngọc x2–x7!',
+    },
+  },
+  'pet-mega-twinfrost': {
+    maxHp: 2200,
+    attack: 222,
+    magic: 226,
+    defense: 150,
+    speed: 132,
+    skill: {
+      powerRatio: 3.05,
+      rageCost: 140,
+      manaCost: 180,
+      specialPassiveNote: 'Thăng Hoa (+14%/tầng) + Khi máu ≤20% tự hồi lên 70% Max HP (1 lần/trận)!',
+    },
+  },
+  'pet-mega-hyon': {
+    maxHp: 2180,
+    attack: 224,
+    magic: 226,
+    defense: 148,
+    speed: 133,
+    skill: { powerRatio: 3.15, rageCost: 140, manaCost: 180, healPercentMaxHp: 0.16, armorPierceRatio: 0.3 },
+  },
+  'pet-mega-elpidios': {
+    maxHp: 2260,
+    attack: 218,
+    magic: 218,
+    defense: 156,
+    speed: 126,
+    skill: { powerRatio: 2.65, rageCost: 130, manaCost: 180, maxHpBoostPercent: 0.14, shieldAmount: 320, healPercentMaxHp: 0.14 },
+  },
+  'pet-mega-priest': {
+    maxHp: 2280,
+    attack: 206,
+    magic: 228,
+    defense: 160,
+    speed: 126,
+    skill: { powerRatio: 2.8, rageCost: 150, manaCost: 180, healPercentMaxHp: 0.2 },
+  },
+  'pet-mega-issylt': {
+    maxHp: 2180,
+    attack: 226,
+    magic: 210,
+    defense: 150,
+    speed: 131,
+    skill: { powerRatio: 2.65, rageCost: 140, manaCost: 180 },
+  },
+  'pet-mega-fireware': {
+    maxHp: 2180,
+    attack: 228,
+    magic: 212,
+    defense: 148,
+    speed: 131,
+    skill: { powerRatio: 2.6, rageCost: 0, manaCost: 200 },
+  },
+  'pet-mega-zero': {
+    maxHp: 2170,
+    attack: 226,
+    magic: 212,
+    defense: 150,
+    speed: 133,
+    skill: { powerRatio: 2.6, rageCost: 0, manaCost: 200 },
+  },
+  // === LEGEND / MECH (Rebalanced Legend Tier: Spetra, Primal Orithyia, Kassadin, Humex, Rattan, Amaterasu, Lucifer, Apophis, Phong Thần, Blastray, Axcel, Toro) ===
+  'pet-boss-spetra': {
+    maxHp: 1960,
+    attack: 198,
+    magic: 200,
+    defense: 142,
+    speed: 129,
+    skill: { powerRatio: 3.15, rageCost: 145, manaCost: 180, lifestealRatio: 0.2 },
+  },
+  'pet-primal-orithyia': {
+    maxHp: 1940,
+    attack: 194,
+    magic: 202,
+    defense: 138,
+    speed: 130,
+    skill: { powerRatio: 3.1, rageCost: 150, manaCost: 180, healPercentMaxHp: 0.14, shieldAmount: 300 },
+  },
+  'pet-kassadin': {
+    maxHp: 1890,
+    attack: 196,
+    magic: 190,
+    defense: 132,
+    speed: 128,
+    skill: { powerRatio: 3.1, rageCost: 140, manaCost: 170, armorPierceRatio: 0.35, shieldAmount: 260 },
+  },
+};
+
 export const STARTER_PETS: PetDef[] = RAW_STARTER_PETS.map((pet) => {
   const isSpecialPet = SPECIAL_SKILL_TIERS.has(pet.tier);
+  const patch = PET_BALANCE_OVERRIDES[pet.id];
   let curatedSkills: SkillDef[] = [];
   if (isSpecialPet && pet.skills.length > 0) {
     const explicitSpecials = pet.skills.filter((sk) => sk.isSpecialCard);
     const chosen = explicitSpecials.length > 0 ? explicitSpecials : [pet.skills[pet.skills.length - 1]];
+    const useQte = AUTHENTIC_QTE_PETS.has(pet.id);
+    const gemReq = AUTHENTIC_GEM_REQUIREMENTS[pet.id];
     curatedSkills = chosen.map((sk) => {
       const hasCustomCost = typeof sk.manaCost === 'number';
+      // Mega Zero authentic PokiGuard rule: Chọn 3 Hàng Bất Kỳ, KHÔNG cần bấm mũi tên!
+      const boardEffectOverride = pet.id === 'pet-mega-zero' ? 'BURN_ROWS' : sk.boardEffect;
+      const burnRowOverride = pet.id === 'pet-mega-zero' ? 3 : sk.burnRowCount;
+      // Single-target skills without board clearing get +0.25x direct damage & 18% pierce so they rival board-clear skills!
+      const noBoardClear = !boardEffectOverride;
+      const basePower = sk.powerRatio > 0 && noBoardClear ? Math.min(3.45, Number((sk.powerRatio + 0.25).toFixed(2))) : sk.powerRatio;
+      const basePierce = noBoardClear ? Math.max(sk.armorPierceRatio ?? 0, 0.18) : sk.armorPierceRatio;
       return {
         ...sk,
         isSpecialCard: true,
+        boardEffect: boardEffectOverride,
+        burnRowCount: burnRowOverride,
+        powerRatio: basePower,
+        armorPierceRatio: basePierce,
         manaCost: sk.manaCost ?? 140,
         rageCost: hasCustomCost ? sk.rageCost : Math.min(180, Math.round(sk.rageCost * 1.45)),
-        needPerfection: sk.needPerfection ?? true,
+        needPerfection: useQte,
+        gemRequirement: gemReq ?? sk.gemRequirement,
+        ...(patch?.skill ?? {}),
       };
     });
   }
@@ -4111,11 +4563,11 @@ export const STARTER_PETS: PetDef[] = RAW_STARTER_PETS.map((pet) => {
   };
   return {
     ...pet,
-    maxHp: normalizeStatInBand(pet.maxHp, rawR.hp, band.hp),
-    attack: normalizeStatInBand(pet.attack, rawR.atk, band.atk),
-    magic: normalizeStatInBand(pet.magic, rawR.mag, band.mag),
-    defense: normalizeStatInBand(pet.defense, rawR.def, band.def),
-    speed: normalizeStatInBand(pet.speed, rawR.spd, band.spd),
+    maxHp: patch?.maxHp ?? normalizeStatInBand(pet.maxHp, rawR.hp, band.hp),
+    attack: patch?.attack ?? normalizeStatInBand(pet.attack, rawR.atk, band.atk),
+    magic: patch?.magic ?? normalizeStatInBand(pet.magic, rawR.mag, band.mag),
+    defense: patch?.defense ?? normalizeStatInBand(pet.defense, rawR.def, band.def),
+    speed: patch?.speed ?? normalizeStatInBand(pet.speed, rawR.spd, band.spd),
     passiveSkill: defaultPassiveForTier(pet),
     evolutionSprites: {
       BASE: pet.spriteId,
@@ -4770,7 +5222,7 @@ const RAW_PVE_STAGES: StageDef[] = [
     mode: 'STORY',
     difficulty: 'HARD',
     enemyPetId: 'pet-boss-spetra',
-    enemyTier: 'ANCIENT',
+    enemyTier: 'LEGEND',
     enemyScale: 2.95,
     arenaBg: '/assets/pokiguard/sprites/boss_bg.png',
     recommendedPower: 12000,
@@ -4944,7 +5396,7 @@ const RAW_PVE_STAGES: StageDef[] = [
     mode: 'ENDLESS_TOWER',
     difficulty: 'HARD',
     enemyPetId: 'pet-primal-orithyia',
-    enemyTier: 'ANCIENT',
+    enemyTier: 'LEGEND',
     enemyScale: 2.95,
     arenaBg: '/assets/pokiguard/sprites/boss_bg.png',
     recommendedPower: 11800,
@@ -5014,11 +5466,45 @@ const RAW_PVE_STAGES: StageDef[] = [
     mode: 'BOSS',
     difficulty: 'HARD',
     enemyPetId: 'pet-boss-spetra',
-    enemyTier: 'ANCIENT',
+    enemyTier: 'LEGEND',
     enemyScale: 3.05,
     arenaBg: '/assets/pokiguard/sprites/boss_bg.png',
     recommendedPower: 13000,
     rewards: { gold: 9200, exp: 4800, stones: 160 },
+  },
+  {
+    id: 'stage-boss-ancient-arceus',
+    name: 'Đi Săn Thần Cổ Đại: Ancient Arceus (A1)',
+    subtitle: 'Thần Sáng Thế Hệ Kim • Pokiwar 4.0 • Thắng lần đầu sở hữu Ancient Arceus!',
+    islandName: 'Ancient A1 • Arceus',
+    islandSprite: '/assets/pokiguard/pets/pw_ancient_arceus.png',
+    isBoss: true,
+    captureOnFirstClear: true,
+    mode: 'BOSS',
+    difficulty: 'HARD',
+    enemyPetId: 'pet-ancient-arceus',
+    enemyTier: 'ANCIENT',
+    enemyScale: 3.15,
+    arenaBg: '/assets/pokiguard/sprites/bg_legend.png',
+    recommendedPower: 14500,
+    rewards: { gold: 10500, exp: 5500, stones: 185 },
+  },
+  {
+    id: 'stage-boss-ancient-rayquaza',
+    name: 'Đi Săn Thần Cổ Đại: Ancient Rayquaza (A3)',
+    subtitle: 'Vị Thần Tê Liệt Hệ Mộc • Pokiwar 4.0 • Thắng lần đầu sở hữu Ancient Rayquaza!',
+    islandName: 'Ancient A3 • Rayquaza',
+    islandSprite: '/assets/pokiguard/pets/pw_ancient_rayquaza.png',
+    isBoss: true,
+    captureOnFirstClear: true,
+    mode: 'BOSS',
+    difficulty: 'HARD',
+    enemyPetId: 'pet-ancient-rayquaza',
+    enemyTier: 'ANCIENT',
+    enemyScale: 3.28,
+    arenaBg: '/assets/pokiguard/sprites/boss_bg.png',
+    recommendedPower: 16000,
+    rewards: { gold: 12000, exp: 6400, stones: 210 },
   },
 
   // ==================== ĐẤU TRƯỜNG MEGA & GALAXY (THU PHỤC THÊM PET HIẾM) ====================
@@ -5236,7 +5722,7 @@ export function computePetPower(pet: PetDef): number {
 }
 
 export interface EggDropItem {
-  kind: 'PET' | 'SHARD' | 'GOLD' | 'STONE_LV2' | 'STONE_LV3' | 'STONE_LV4' | 'CHARM_BINH_AN' | 'CHARM_MAY_MAN';
+  kind: 'PET' | 'SHARD' | 'GOLD' | 'STONE_LV2' | 'STONE_LV3' | 'STONE_LV4' | 'STONE_LV5';
   amount: number;
   petId?: string;
   label: string;
@@ -5311,7 +5797,7 @@ export function rollEggGacha(tier: 'GOLD' | 'RARE'): EggDropItem {
       return { kind: 'STONE_LV4', amount: 2, label: '+2 Đá Cấp 4', rarity: 'EPIC', icon: '/assets/pokiguard/sprites/stone_m_4.png' };
     }
     if (r < 90) {
-      return { kind: 'CHARM_MAY_MAN', amount: 1, label: '+1 Bùa May Mắn', rarity: 'RARE', icon: '/assets/pokiguard/sprites/charm_may_man.png' };
+      return { kind: 'STONE_LV5', amount: 1, label: '+1 Đá Cấp 5', rarity: 'EPIC', icon: '/assets/pokiguard/sprites/stone_m_5.png' };
     }
     return { kind: 'GOLD', amount: 600, label: '+600 Vàng', rarity: 'COMMON', icon: '/assets/pokiguard/sprites/gold.png' };
   }
@@ -5334,7 +5820,7 @@ export function rollEggGacha(tier: 'GOLD' | 'RARE'): EggDropItem {
     return { kind: 'STONE_LV3', amount: 1, label: '+1 Đá Cấp 3', rarity: 'RARE', icon: '/assets/pokiguard/sprites/stone_w_3.png' };
   }
   if (r < 82) {
-    return { kind: 'CHARM_BINH_AN', amount: 1, label: '+1 Bùa Bình An', rarity: 'RARE', icon: '/assets/pokiguard/sprites/charm_binh_an.png' };
+    return { kind: 'STONE_LV3', amount: 2, label: '+2 Đá Cấp 3', rarity: 'RARE', icon: '/assets/pokiguard/sprites/stone_e_3.png' };
   }
   return { kind: 'GOLD', amount: 280, label: '+280 Vàng', rarity: 'COMMON', icon: '/assets/pokiguard/sprites/gold.png' };
 }

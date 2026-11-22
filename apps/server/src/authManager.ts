@@ -1,4 +1,4 @@
-import { MAX_PET_LEVEL } from '@pokiwar/shared';
+import { MAX_PET_LEVEL, STARTER_PETS } from '@pokiwar/shared';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,6 +52,71 @@ function clampProgressPetLevels(progress: Record<string, unknown>): boolean {
   return changed;
 }
 
+function applyFullMaxPetsToVip(progress: Record<string, unknown>): boolean {
+  let changed = false;
+  const allPetIds = STARTER_PETS.map((p) => p.id);
+
+  const prevUnlocked = Array.isArray(progress.unlockedPets) ? (progress.unlockedPets as string[]) : [];
+  if (prevUnlocked.length !== allPetIds.length || allPetIds.some((id) => !prevUnlocked.includes(id))) {
+    progress.unlockedPets = [...allPetIds];
+    changed = true;
+  }
+
+  const ensureMaxMap = (key: string, maxVal: number) => {
+    const existing =
+      progress[key] && typeof progress[key] === 'object'
+        ? { ...(progress[key] as Record<string, number>) }
+        : {};
+    let mapChanged = !progress[key];
+    for (const id of allPetIds) {
+      if (existing[id] !== maxVal) {
+        existing[id] = maxVal;
+        mapChanged = true;
+      }
+    }
+    if (mapChanged) {
+      progress[key] = existing;
+      changed = true;
+    }
+  };
+
+  ensureMaxMap('petLevels', MAX_PET_LEVEL);
+  ensureMaxMap('petStars', 6);
+  ensureMaxMap('petGenLevels', 5);
+  ensureMaxMap('petBreakthroughs', 5);
+
+  if (progress.vipLevel !== 10) {
+    progress.vipLevel = 10;
+    changed = true;
+  }
+  if (typeof progress.gold !== 'number' || progress.gold < 9999999) {
+    progress.gold = 9999999;
+    changed = true;
+  }
+  if (typeof progress.stones !== 'number' || progress.stones < 100000) {
+    progress.stones = 100000;
+    changed = true;
+  }
+  if (typeof progress.gloryCoins !== 'number' || progress.gloryCoins < 99999) {
+    progress.gloryCoins = 99999;
+    changed = true;
+  }
+  if (typeof progress.genCores !== 'number' || progress.genCores < 999) {
+    progress.genCores = 999;
+    changed = true;
+  }
+  const bag = Array.isArray(progress.stoneBag) ? (progress.stoneBag as number[]) : [];
+  if (bag.length !== 5 || bag.some((n) => (n ?? 0) < 999)) {
+    progress.stoneBag = [999, 999, 999, 999, 999];
+    changed = true;
+  }
+  if ('charms' in progress) {
+    delete progress.charms;
+    changed = true;
+  }
+  return changed;
+}
+
 export function createStarterProgress(displayName: string, starterPetId = 'pet-583'): Record<string, unknown> {
   const initialUnlocked = Array.from(new Set([starterPetId, 'pet-583', 'pet-1431', 'pet-725']));
   return {
@@ -70,7 +135,6 @@ export function createStarterProgress(displayName: string, starterPetId = 'pet-5
     gold: 1500,
     stones: 25,
     stoneBag: [8, 4, 2, 1, 0],
-    charms: { binhAn: 2, mayMan: 2 },
     wins: 0,
     worldBossBestDamage: 0,
     wheelSpunCount: 0,
@@ -186,6 +250,10 @@ export class AuthManager {
           createdAt: new Date().toISOString(),
           progress: clonedProgress,
         });
+        changed = true;
+      }
+      const vipAcc = this.accounts.get(v.username);
+      if (vipAcc && applyFullMaxPetsToVip(vipAcc.progress)) {
         changed = true;
       }
     }
